@@ -96,6 +96,9 @@ uint64_t arnm_message_tag(ArnmMessage* msg);
 void* arnm_message_data(ArnmMessage* msg);
 size_t arnm_message_size(ArnmMessage* msg);
 
+/* Panic on unmatched message (for receive blocks) */
+void arnm_panic_nomatch(void);
+
 /* ============================================================
  * Memory Management (ARC)
  * ============================================================ */

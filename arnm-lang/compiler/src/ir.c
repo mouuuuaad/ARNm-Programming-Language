@@ -140,6 +140,66 @@ IrInstr* ir_build_add(IrFunction* fn, IrBlock* block, IrValue lhs, IrValue rhs) 
     return i;
 }
 
+IrInstr* ir_build_sub(IrFunction* fn, IrBlock* block, IrValue lhs, IrValue rhs) {
+    IrInstr* i = new_instr(IR_SUB);
+    i->type = lhs.type;
+    i->result = ir_val_var(fn->vreg_counter++, lhs.type);
+    i->op1 = lhs;
+    i->op2 = rhs;
+    block_append(block, i);
+    return i;
+}
+
+IrInstr* ir_build_mul(IrFunction* fn, IrBlock* block, IrValue lhs, IrValue rhs) {
+    IrInstr* i = new_instr(IR_MUL);
+    i->type = lhs.type;
+    i->result = ir_val_var(fn->vreg_counter++, lhs.type);
+    i->op1 = lhs;
+    i->op2 = rhs;
+    block_append(block, i);
+    return i;
+}
+
+IrInstr* ir_build_div(IrFunction* fn, IrBlock* block, IrValue lhs, IrValue rhs) {
+    IrInstr* i = new_instr(IR_DIV);
+    i->type = lhs.type;
+    i->result = ir_val_var(fn->vreg_counter++, lhs.type);
+    i->op1 = lhs;
+    i->op2 = rhs;
+    block_append(block, i);
+    return i;
+}
+
+IrInstr* ir_build_mod(IrFunction* fn, IrBlock* block, IrValue lhs, IrValue rhs) {
+    IrInstr* i = new_instr(IR_MOD);
+    i->type = lhs.type;
+    i->result = ir_val_var(fn->vreg_counter++, lhs.type);
+    i->op1 = lhs;
+    i->op2 = rhs;
+    block_append(block, i);
+    return i;
+}
+
+IrInstr* ir_build_and(IrFunction* fn, IrBlock* block, IrValue lhs, IrValue rhs) {
+    IrInstr* i = new_instr(IR_AND);
+    i->type = ir_type_bool();
+    i->result = ir_val_var(fn->vreg_counter++, i->type);
+    i->op1 = lhs;
+    i->op2 = rhs;
+    block_append(block, i);
+    return i;
+}
+
+IrInstr* ir_build_or(IrFunction* fn, IrBlock* block, IrValue lhs, IrValue rhs) {
+    IrInstr* i = new_instr(IR_OR);
+    i->type = ir_type_bool();
+    i->result = ir_val_var(fn->vreg_counter++, i->type);
+    i->op1 = lhs;
+    i->op2 = rhs;
+    block_append(block, i);
+    return i;
+}
+
 IrInstr* ir_build_alloca(IrFunction* fn, IrBlock* block, IrType type) {
     IrInstr* i = new_instr(IR_ALLOCA);
     /* Result is a pointer to type */
@@ -254,6 +314,14 @@ IrValue ir_val_const_i32(int32_t i) {
     v.kind = VAL_CONST;
     v.type = ir_type_i32();
     v.storage.constant.as.i = (uint64_t)i;
+    return v;
+}
+
+IrValue ir_val_const_bool(bool b) {
+    IrValue v;
+    v.kind = VAL_CONST;
+    v.type = ir_type_bool();
+    v.storage.constant.as.b = b;
     return v;
 }
 

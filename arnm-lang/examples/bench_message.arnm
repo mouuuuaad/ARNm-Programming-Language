@@ -1,0 +1,26 @@
+actor Sink {
+    let count: i32;
+    fn init() { 
+        self.count = 0; 
+    }
+    receive {
+        100 => {
+            self.count = self.count + 1;
+            if (self.count == 50000) {
+                print(self.count);
+            }
+        }
+    }
+}
+
+fn main() {
+    let sink = spawn Sink();
+    let mut i = 0;
+    while (i < 50000) {
+        sink ! 100;
+        i = i + 1;
+    }
+    
+    let mut w = 0;
+    while (w < 200000000) { w = w + 1; }
+}

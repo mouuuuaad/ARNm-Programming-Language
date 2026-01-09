@@ -10,6 +10,22 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <assert.h>
+
+/* ============================================================
+ * Runtime Assertions (Day 8 Hardening)
+ * ============================================================ */
+
+#define RUNTIME_ASSERT(cond, msg) do { \
+    if (!(cond)) { \
+        fprintf(stderr, "[RUNTIME INVARIANT VIOLATION] %s\n", msg); \
+        assert(cond); \
+    } \
+} while(0)
+
+#define ASSERT_VALID_STATE(proc) \
+    RUNTIME_ASSERT((proc)->state >= PROC_STATE_READY && (proc)->state <= PROC_STATE_DEAD, \
+                   "process has invalid state")
 
 /* ============================================================
  * Global Scheduler State
@@ -185,9 +201,14 @@ static void* worker_main(void* arg) {
         ArnmProcess* proc = sched_next(worker);
         
         if (proc) {
+            /* Day 8: Validate process state before running */
+            RUNTIME_ASSERT(proc->state == PROC_STATE_READY || proc->state == PROC_STATE_WAITING,
+                          "process popped from queue should be ready or waiting");
+            
             worker->current = proc;
             proc->state = PROC_STATE_RUNNING;
             proc->run_count++;
+            proc->worker_id = worker->id;
             proc->worker_id = worker->id;
             proc_set_current(proc);
             worker->run_count++;

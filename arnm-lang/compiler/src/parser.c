@@ -117,7 +117,7 @@ static void synchronize(Parser* parser) {
 
 typedef enum {
     PREC_NONE,
-    PREC_ASSIGNMENT,    /* = */
+    PREC_ASSIGNMENT,    /* = += -= *= /= */
     PREC_OR,            /* || */
     PREC_AND,           /* && */
     PREC_EQUALITY,      /* == != */
@@ -249,6 +249,10 @@ static BinaryOp token_to_binary_op(TokenKind kind) {
         case TOK_PIPE:     return BINARY_BITOR;
         case TOK_CARET:    return BINARY_BITXOR;
         case TOK_EQ:       return BINARY_ASSIGN;
+        case TOK_PLUS_EQ:  return BINARY_ADD;  /* Compound: desugar in sema */
+        case TOK_MINUS_EQ: return BINARY_SUB;
+        case TOK_STAR_EQ:  return BINARY_MUL;
+        case TOK_SLASH_EQ: return BINARY_DIV;
         case TOK_BANG:     return BINARY_SEND;
         default:           return BINARY_ADD;
     }
@@ -256,7 +260,11 @@ static BinaryOp token_to_binary_op(TokenKind kind) {
 
 static Precedence get_precedence(TokenKind kind) {
     switch (kind) {
-        case TOK_EQ:       return PREC_ASSIGNMENT;
+        case TOK_EQ:
+        case TOK_PLUS_EQ:
+        case TOK_MINUS_EQ:
+        case TOK_STAR_EQ:
+        case TOK_SLASH_EQ: return PREC_ASSIGNMENT;
         case TOK_PIPE_PIPE: return PREC_OR;
         case TOK_AND_AND:  return PREC_AND;
         case TOK_EQ_EQ:
@@ -408,6 +416,10 @@ static AstExpr* parse_infix(Parser* parser, AstExpr* left) {
         case TOK_PIPE:
         case TOK_CARET:
         case TOK_EQ:
+        case TOK_PLUS_EQ:
+        case TOK_MINUS_EQ:
+        case TOK_STAR_EQ:
+        case TOK_SLASH_EQ:
         case TOK_BANG:        return parse_binary(parser, left);
         case TOK_LPAREN:      return parse_call(parser, left);
         case TOK_LBRACKET:    return parse_index(parser, left);
@@ -569,6 +581,50 @@ static AstStmt* parse_while_stmt(Parser* parser) {
     return stmt;
 }
 
+static AstStmt* parse_for_stmt(Parser* parser) {
+    Span start = parser->previous.span;
+    
+    /* for x in expr { body } */
+    consume(parser, TOK_IDENT, "expected iterator variable after 'for'");
+    const char* var_name = parser->previous.lexeme;
+    uint32_t var_name_len = parser->previous.length;
+    
+    if (!match(parser, TOK_IDENT) || 
+        parser->previous.length != 2 ||
+        parser->previous.lexeme[0] != 'i' ||
+        parser->previous.lexeme[1] != 'n') {
+        error(parser, "expected 'in' after iterator variable");
+    }
+    
+    AstExpr* iterable = parse_expression(parser);
+    AstBlock* body = parse_block(parser);
+    
+    AstStmt* stmt = AST_NEW(parser->arena, AstStmt);
+    if (!stmt) return NULL;
+    
+    stmt->kind = AST_FOR_STMT;
+    stmt->as.for_stmt.common.span = start;
+    stmt->as.for_stmt.var_name = var_name;
+    stmt->as.for_stmt.var_name_len = var_name_len;
+    stmt->as.for_stmt.iterable = iterable;
+    stmt->as.for_stmt.body = body;
+    return stmt;
+}
+
+static AstStmt* parse_loop_stmt(Parser* parser) {
+    Span start = parser->previous.span;
+    
+    AstBlock* body = parse_block(parser);
+    
+    AstStmt* stmt = AST_NEW(parser->arena, AstStmt);
+    if (!stmt) return NULL;
+    
+    stmt->kind = AST_LOOP_STMT;
+    stmt->as.loop_stmt.common.span = start;
+    stmt->as.loop_stmt.body = body;
+    return stmt;
+}
+
 static AstStmt* parse_spawn_stmt(Parser* parser) {
     Span start = parser->previous.span;
     
@@ -597,10 +653,13 @@ static AstStmt* parse_receive_stmt(Parser* parser) {
             break;
         }
         
-        /* Parse pattern (simplified: just an identifier for now) */
-        consume(parser, TOK_IDENT, "expected pattern");
-        arms[arm_count].pattern = parser->previous.lexeme;
-        arms[arm_count].pattern_len = parser->previous.length;
+        /* Parse pattern (identifier or integer) */
+        if (match(parser, TOK_IDENT) || match(parser, TOK_INT_LIT)) {
+            arms[arm_count].pattern = parser->previous.lexeme;
+            arms[arm_count].pattern_len = parser->previous.length;
+        } else {
+            error(parser, "expected pattern (identifier or number)");
+        }
         
         consume(parser, TOK_FAT_ARROW, "expected '=>' after pattern");
         arms[arm_count].body = parse_block(parser);
@@ -627,6 +686,8 @@ AstStmt* parse_statement(Parser* parser) {
     if (match(parser, TOK_RETURN))  return parse_return_stmt(parser);
     if (match(parser, TOK_IF))      return parse_if_stmt(parser);
     if (match(parser, TOK_WHILE))   return parse_while_stmt(parser);
+    if (match(parser, TOK_FOR))     return parse_for_stmt(parser);
+    if (match(parser, TOK_LOOP))    return parse_loop_stmt(parser);
     if (match(parser, TOK_SPAWN))   return parse_spawn_stmt(parser);
     if (match(parser, TOK_RECEIVE)) return parse_receive_stmt(parser);
     
@@ -839,6 +900,55 @@ static AstActorDecl* parse_actor_inner(Parser* parser) {
     return actor;
 }
 
+
+static AstStructDecl* parse_struct_inner(Parser* parser) {
+    Span start = parser->previous.span;
+    
+    consume(parser, TOK_IDENT, "expected struct name");
+    const char* name = parser->previous.lexeme;
+    uint32_t name_len = parser->previous.length;
+    
+    consume(parser, TOK_LBRACE, "expected '{' after struct name");
+    
+    FnParam fields[64];
+    size_t field_count = 0;
+    
+    if (!check(parser, TOK_RBRACE)) {
+        do {
+            if (field_count >= 64) {
+                error(parser, "too many fields in struct");
+                break;
+            }
+            
+            fields[field_count].is_mut = match(parser, TOK_MUT);
+            consume(parser, TOK_IDENT, "expected field name");
+            fields[field_count].name = parser->previous.lexeme;
+            fields[field_count].name_len = parser->previous.length;
+            
+            consume(parser, TOK_COLON, "expected ':' after field name");
+            fields[field_count].type = parse_type(parser);
+            
+            field_count++;
+        } while (match(parser, TOK_COMMA));
+    }
+    
+    consume(parser, TOK_RBRACE, "expected '}' after struct body");
+    
+    AstStructDecl* decl = AST_NEW(parser->arena, AstStructDecl);
+    if (!decl) return NULL;
+    
+    decl->common.span = start;
+    decl->name = name;
+    decl->name_len = name_len;
+    decl->field_count = field_count;
+    
+    if (field_count > 0) {
+        decl->fields = AST_NEW_ARRAY(parser->arena, FnParam, field_count);
+        memcpy(decl->fields, fields, sizeof(FnParam) * field_count);
+    }
+    return decl;
+}
+
 AstDecl* parse_declaration(Parser* parser) {
     AstDecl* decl = AST_NEW(parser->arena, AstDecl);
     if (!decl) return NULL;
@@ -854,6 +964,13 @@ AstDecl* parse_declaration(Parser* parser) {
         decl->kind = AST_ACTOR_DECL;
         AstActorDecl* actor = parse_actor_inner(parser);
         if (actor) decl->as.actor_decl = *actor;
+        return decl;
+    }
+
+    if (match(parser, TOK_STRUCT)) {
+        decl->kind = AST_STRUCT_DECL;
+        AstStructDecl* s = parse_struct_inner(parser);
+        if (s) decl->as.struct_decl = *s;
         return decl;
     }
     

@@ -7,6 +7,28 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
+#include <ctype.h>
+
+/* ============================================================
+ * Contract Assertions (Day 8 Hardening)
+ * These validate that sema has done its job before irgen runs.
+ * ============================================================ */
+
+#define IRGEN_ASSERT(cond, msg) do { \
+    if (!(cond)) { \
+        fprintf(stderr, "[IRGEN CONTRACT VIOLATION] %s\n", msg); \
+        assert(cond); \
+    } \
+} while(0)
+
+#define IRGEN_REQUIRE_NOT_NULL(ptr, name) \
+    IRGEN_ASSERT((ptr) != NULL, name " must not be NULL")
+
+#define IRGEN_REQUIRE_BLOCK(ctx) \
+    IRGEN_ASSERT((ctx)->cur_block != NULL, "current block must be set")
+
+#define IRGEN_REQUIRE_FN(ctx) \
+    IRGEN_ASSERT((ctx)->cur_fn != NULL, "current function must be set")
 
 typedef struct {
     SemaContext* sema;
@@ -14,6 +36,10 @@ typedef struct {
     IrFunction*  cur_fn;
     IrBlock*     cur_block;
     Type*        cur_actor_type; /* Current actor type if inside actor */
+    
+    /* Loop context for break/continue */
+    IrBlock*     break_bb;    /* Target for break statements */
+    IrBlock*     continue_bb; /* Target for continue statements */
     
     struct {
         char*   name; /* Owns the copy */
@@ -129,12 +155,18 @@ static IrValue gen_binary(GenContext* ctx, AstBinaryExpr* bin) {
     IrInstr* inst = NULL;
     switch (bin->op) {
         case BINARY_ADD: inst = ir_build_add(ctx->cur_fn, ctx->cur_block, lhs, rhs); break;
+        case BINARY_SUB: inst = ir_build_sub(ctx->cur_fn, ctx->cur_block, lhs, rhs); break;
+        case BINARY_MUL: inst = ir_build_mul(ctx->cur_fn, ctx->cur_block, lhs, rhs); break;
+        case BINARY_DIV: inst = ir_build_div(ctx->cur_fn, ctx->cur_block, lhs, rhs); break;
+        case BINARY_MOD: inst = ir_build_mod(ctx->cur_fn, ctx->cur_block, lhs, rhs); break;
         case BINARY_EQ:  inst = ir_build_cmp(ctx->cur_fn, ctx->cur_block, IR_EQ, lhs, rhs); break;
         case BINARY_NE:  inst = ir_build_cmp(ctx->cur_fn, ctx->cur_block, IR_NE, lhs, rhs); break;
         case BINARY_LT:  inst = ir_build_cmp(ctx->cur_fn, ctx->cur_block, IR_LT, lhs, rhs); break;
         case BINARY_GT:  inst = ir_build_cmp(ctx->cur_fn, ctx->cur_block, IR_GT, lhs, rhs); break;
         case BINARY_LE:  inst = ir_build_cmp(ctx->cur_fn, ctx->cur_block, IR_LE, lhs, rhs); break;
         case BINARY_GE:  inst = ir_build_cmp(ctx->cur_fn, ctx->cur_block, IR_GE, lhs, rhs); break;
+        case BINARY_AND: inst = ir_build_and(ctx->cur_fn, ctx->cur_block, lhs, rhs); break;
+        case BINARY_OR:  inst = ir_build_or(ctx->cur_fn, ctx->cur_block, lhs, rhs); break;
         default: break;
     }
     
@@ -211,63 +243,137 @@ static IrValue gen_call(GenContext* ctx, AstCallExpr* call) {
 }
 
 static IrValue gen_expr(GenContext* ctx, AstExpr* expr) {
+    /* Contract: gen_expr requires valid context and expression */
+    IRGEN_REQUIRE_NOT_NULL(ctx, "context");
+    if (!expr) {
+        return (IrValue){ .kind = VAL_UNDEF };
+    }
+    IRGEN_REQUIRE_FN(ctx);
+    IRGEN_REQUIRE_BLOCK(ctx);
+    
     switch (expr->kind) {
-        case AST_BINARY_EXPR: return gen_binary(ctx, &expr->as.binary);
+        case AST_BINARY_EXPR: {
+            if (expr->as.binary.op == BINARY_ASSIGN) {
+                AstExpr* lhs = expr->as.binary.left;
+                IrValue rhs_val = gen_expr(ctx, expr->as.binary.right);
+                
+                if (lhs->kind == AST_IDENT_EXPR) {
+                    IrType type = ir_type_i32(); 
+                    IrValue ptr = lookup_local(ctx, lhs->as.ident.name, lhs->as.ident.name_len, &type);
+                    if (ptr.kind != VAL_UNDEF) {
+                        ir_build_store(ctx->cur_block, rhs_val, ptr);
+                    }
+                } else if (lhs->kind == AST_FIELD_EXPR) {
+                    /* Handle self.field = val OR struct.field = val */
+                    IrValue obj_val = gen_expr(ctx, lhs->as.field.object);
+                    Type* obj_type = lhs->as.field.object->common.sema_type;
+                    /* Fallback for self if sema_type missing? */
+                    if (!obj_type && lhs->as.field.object->kind == AST_SELF_EXPR) obj_type = ctx->cur_actor_type;
+                    
+                    if (obj_type) {
+                        obj_type = type_resolve(obj_type);
+                        const char* name = lhs->as.field.field_name;
+                        uint32_t len = lhs->as.field.field_name_len;
+                        int index = -1;
+                        
+                        if (obj_type->kind == TYPE_STRUCT) {
+                            TypeStruct* st = &obj_type->as.struct_type;
+                            for (size_t i = 0; i < st->field_count; i++) {
+                                if (st->fields[i].name_len == len && strncmp(st->fields[i].name, name, len) == 0) {
+                                    index = (int)i;
+                                    break;
+                                }
+                            }
+                        } else if (obj_type->kind == TYPE_ACTOR) {
+                            TypeActor* actor = &obj_type->as.actor;
+                            for (size_t i = 0; i < actor->field_count; i++) {
+                                if (actor->fields[i].name_len == len && strncmp(actor->fields[i].name, name, len) == 0) {
+                                    index = (int)i;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        if (index >= 0) {
+                            IrValue base = obj_val;
+                            /* If actor (self), verify indirection. Assuming self is Process*, state is at *self (first field) or similar? 
+                               Previous logic used ir_build_load(ptr, obj_val). Assuming obj_val is address of pointer?
+                               If obj_val is IR_VAR (the parameter 'self'), it holds Process*.
+                               If state is embedded?
+                               If runtime stores state pointer as first generic field.
+                               We load it. 
+                            */
+                            if (obj_type->kind == TYPE_ACTOR) {
+                                IrInstr* state_load = ir_build_load(ctx->cur_fn, ctx->cur_block, ir_type_ptr(), base);
+                                base = state_load->result;
+                            }
+                            
+                            IrInstr* fptr = ir_build_field_ptr(ctx->cur_fn, ctx->cur_block, base, index);
+                            ir_build_store(ctx->cur_block, rhs_val, fptr->result);
+                        }
+                    }
+                }
+                return rhs_val;
+            }
+            return gen_binary(ctx, &expr->as.binary);
+        }
         case AST_INT_LIT_EXPR: return ir_val_const_i32(expr->as.int_lit.value);
-        case AST_BOOL_LIT_EXPR: return ir_val_const_i32(expr->as.bool_lit.value ? 1 : 0);
+        case AST_BOOL_LIT_EXPR: return ir_val_const_bool(expr->as.bool_lit.value);
         case AST_IDENT_EXPR: return gen_identifier(ctx, &expr->as.ident);
         case AST_CALL_EXPR: return gen_call(ctx, &expr->as.call);
         case AST_FIELD_EXPR: {
-            /* self.field */
-            /* 1. Gen object (self) */
             IrValue obj = gen_expr(ctx, expr->as.field.object);
+            Type* obj_type = expr->as.field.object->common.sema_type;
+            /* Fallback for self */
+            if (!obj_type && expr->as.field.object->kind == AST_SELF_EXPR) obj_type = ctx->cur_actor_type;
             
-            /* 2. Find field index */
-            /* Need to look up field in type? 
-               IR Gen usually relies on type info attached to expression or inferred.
-               But our AST nodes don't store resolved Type* directly (Sema does verification but lost it?).
-               Sema context has types. 
-               But 'gen_expr' receives AstExpr.
-               Typically compilers annotate AST with types during Sema. 
-               We didn't add 'Type* type' to AstExpr common? 
-               AstCommon has span. No type.
-               
-               We need to lookup type again? Or pass it?
-               For `self`, we know it is `ctx->cur_fn`'s class? 
-               Wait, `ctx->cur_fn` is IR function.
-               We don't know which actor we are in easily unless we track it.
-               
-               Workaround: Assume `obj` is `IR_SELF` or `IR_PTR`.
-               Resolve field name to index by looking at the Actor declaration?
-               But we don't have the Actor decl here easily.
-               
-               Better: Annotate AST with type in Sema.
-               Quick fix: re-lookup symbol or similar? 
-               'self' type is semantically known. 
-               
-               Let's add `AstActorDecl* cur_actor` to `GenContext`.
-            */
-            
-            /* Assume we are in an actor method if self is used. */
-            /* We need to know which actor to look up field index. */
-            
-            /* Implementation Plan:
-               1. Add `Type* self_type` (or `AstActorDecl*`) to GenContext.
-               2. When generating actor methods, set it.
-               3. Iterate `self_type` fields to find index.
-            */
-            
-            if (ctx->cur_actor_type && expr->as.field.object->kind == AST_SELF_EXPR) {
-                 const char* name = expr->as.field.field_name;
-                 uint32_t len = expr->as.field.field_name_len;
-                 
-                 int index = -1;
-                 /* TypeActor has fields now */
-                 TypeActor* actor = &ctx->cur_actor_type->as.actor;
-                 /* fprintf(stderr, "Debug: Looking for field '%.*s' in actor with %zu fields\n", len, name, actor->field_count); */
-                 
-                 for (size_t i = 0; i < actor->field_count; i++) {
-                     /* fprintf(stderr, "Debug: Field %zu: '%.*s'\n", i, actor->fields[i].name_len, actor->fields[i].name); */
+            if (obj_type) {
+                obj_type = type_resolve(obj_type);
+                const char* name = expr->as.field.field_name;
+                uint32_t len = expr->as.field.field_name_len;
+                int index = -1;
+                
+                if (obj_type->kind == TYPE_STRUCT) {
+                    TypeStruct* st = &obj_type->as.struct_type;
+                    for (size_t i = 0; i < st->field_count; i++) {
+                        if (st->fields[i].name_len == len && strncmp(st->fields[i].name, name, len) == 0) {
+                            index = (int)i;
+                            break;
+                        }
+                    }
+                } else if (obj_type->kind == TYPE_ACTOR) {
+                    TypeActor* actor = &obj_type->as.actor;
+                    for (size_t i = 0; i < actor->field_count; i++) {
+                        if (actor->fields[i].name_len == len && strncmp(actor->fields[i].name, name, len) == 0) {
+                            index = (int)i;
+                            break;
+                        }
+                    }
+                }
+                
+                if (index != -1) {
+                    IrValue base = obj;
+                    if (obj_type->kind == TYPE_ACTOR) {
+                        IrInstr* state_load = ir_build_load(ctx->cur_fn, ctx->cur_block, ir_type_ptr(), base);
+                        base = state_load->result;
+                    }
+                    
+                    IrInstr* fptr = ir_build_field_ptr(ctx->cur_fn, ctx->cur_block, base, index);
+                    
+                    /* Determine result type for load */
+                    IrType load_ty = ir_type_i32(); /* Default */
+                    /* Ideally convert expr->common.sema_type to IrType. 
+                       But current IRGen just uses i32/ptr. 
+                       If field type is pointer (actor, struct)? 
+                       We need type mapping. 
+                       For now, use i32 unless we know better. */
+                    
+                    IrInstr* load = ir_build_load(ctx->cur_fn, ctx->cur_block, load_ty, fptr->result);
+                    return load->result;
+                }
+            }
+            return (IrValue){ .kind = VAL_UNDEF };
+        }
                      if (actor->fields[i].name_len == len &&
                          strncmp(actor->fields[i].name, name, len) == 0) {
                          index = (int)i;
@@ -328,6 +434,12 @@ static IrValue gen_expr(GenContext* ctx, AstExpr* expr) {
 static void gen_block(GenContext* ctx, AstBlock* block);
 
 static void gen_stmt(GenContext* ctx, AstStmt* stmt) {
+    /* Contract: gen_stmt requires valid context and statement */
+    IRGEN_REQUIRE_NOT_NULL(ctx, "context");
+    if (!stmt) return;  /* Silently skip null statements */
+    IRGEN_REQUIRE_FN(ctx);
+    IRGEN_REQUIRE_BLOCK(ctx);
+    
     switch (stmt->kind) {
         case AST_LET_STMT: {
             AstLetStmt* let = &stmt->as.let_stmt;
@@ -359,17 +471,43 @@ static void gen_stmt(GenContext* ctx, AstStmt* stmt) {
             gen_expr(ctx, stmt->as.expr_stmt.expr);
             break;
         }
+        case AST_LOOP_STMT: {
+            IrBlock* body_bb = ir_block_create(ctx->cur_fn, "loop.body");
+            IrBlock* end_bb  = ir_block_create(ctx->cur_fn, "loop.end");
+            
+            /* Jump to body */
+            ir_build_jmp(ctx->cur_block, body_bb);
+            
+            /* Save previous loop context */
+            IrBlock* prev_break = ctx->break_bb;
+            IrBlock* prev_continue = ctx->continue_bb;
+            ctx->break_bb = end_bb;
+            ctx->continue_bb = body_bb;
+            
+            /* Body Block */
+            ctx->cur_block = body_bb;
+            gen_block(ctx, stmt->as.loop_stmt.body);
+            
+            /* Loop back unconditionally */
+            ir_build_jmp(ctx->cur_block, body_bb);
+            
+            /* Restore context */
+            ctx->break_bb = prev_break;
+            ctx->continue_bb = prev_continue;
+            
+            /* Continue compilation at end_bb */
+            ctx->cur_block = end_bb;
+            break;
+        }
+        case AST_FOR_STMT: {
+            fprintf(stderr, "Code generation for 'for' loops not yet implemented\n");
+            break;
+        }
         case AST_SPAWN_STMT: {
             AstSpawnStmt* spawn = &stmt->as.spawn_stmt;
-            /* Use shared logic handles both foo() and Actor.method() */
             if (spawn->expr->kind == AST_CALL_EXPR) {
                 gen_spawn_call(ctx, &spawn->expr->as.call);
             } else if (spawn->expr->kind == AST_GROUP_EXPR) {
-                /* Unwrap group if needed or just use gen_expr if spawn stmt was an expression wrapper? 
-                   AstSpawnStmt contains 'expr' which is the call. 
-                   If the parser allows parens around call, we might need unwrapping. 
-                   But checking AST_CALL_EXPR directly is fine for now. 
-                */
                 AstExpr* target = spawn->expr;
                 while (target->kind == AST_GROUP_EXPR) target = target->as.group.inner;
                 if (target->kind == AST_CALL_EXPR) {
@@ -378,7 +516,6 @@ static void gen_stmt(GenContext* ctx, AstStmt* stmt) {
             }
             break;
         }
-
         case AST_IF_STMT: {
             AstIfStmt* if_stmt = &stmt->as.if_stmt;
             
@@ -436,6 +573,14 @@ static void gen_stmt(GenContext* ctx, AstStmt* stmt) {
             IrBlock* body_bb = ir_block_create(ctx->cur_fn, "while.body");
             IrBlock* exit_bb = ir_block_create(ctx->cur_fn, "while.exit");
             
+            /* Save previous loop context */
+            IrBlock* prev_break = ctx->break_bb;
+            IrBlock* prev_continue = ctx->continue_bb;
+            
+            /* Set loop context for break/continue */
+            ctx->break_bb = exit_bb;
+            ctx->continue_bb = cond_bb;
+            
             /* Entry -> Cond */
             ir_build_jmp(ctx->cur_block, cond_bb);
             
@@ -447,7 +592,14 @@ static void gen_stmt(GenContext* ctx, AstStmt* stmt) {
             /* Body Block */
             ctx->cur_block = body_bb;
             if (w->body) gen_block(ctx, w->body);
-            ir_build_jmp(ctx->cur_block, cond_bb);
+            /* Only jump back if not already terminated */
+            if (!ctx->cur_block->tail || (ctx->cur_block->tail->op != IR_JMP && ctx->cur_block->tail->op != IR_BR && ctx->cur_block->tail->op != IR_RET)) {
+                ir_build_jmp(ctx->cur_block, cond_bb);
+            }
+            
+            /* Restore previous loop context */
+            ctx->break_bb = prev_break;
+            ctx->continue_bb = prev_continue;
             
             /* Exit Block */
             ctx->cur_block = exit_bb;
@@ -457,53 +609,112 @@ static void gen_stmt(GenContext* ctx, AstStmt* stmt) {
             AstReceiveStmt* recv = &stmt->as.receive_stmt;
             
             /* Call runtime: %msg = arnm_receive(null) */
+            /* Call runtime: %msg = arnm_receive(null) */
             IrValue args[1];
             args[0] = ir_val_const_i32(0); args[0].type = ir_type_ptr(); /* null */
             
             IrInstr* call = ir_build_call(ctx->cur_fn, ctx->cur_block, "arnm_receive", args, 1, ir_type_ptr());
             IrValue msg_val = call->result;
             
-            /* For now, just take the first arm and bind it unconditionally */
-            if (recv->arm_count > 0) {
-                ReceiveArm* arm = &recv->arms[0];
+            /* Tag is at offset 0 in ArnmMessage */
+            IrInstr* field = ir_build_field_ptr(ctx->cur_fn, ctx->cur_block, msg_val, 0);
+            IrInstr* load_tag = ir_build_load(ctx->cur_fn, ctx->cur_block, ir_type_i64(), field->result);
+            IrValue tag_val = load_tag->result;
+            
+            if (recv->arm_count == 0) {
+                /* No arms - nothing to match */
+                break;
+            }
+            
+            /* Handle all arms uniformly with matching logic */
+            
+            /* Create blocks for each arm and a merge block */
+            IrBlock** arm_blocks = malloc(sizeof(IrBlock*) * recv->arm_count);
+            IrBlock* merge_bb = ir_block_create(ctx->cur_fn, "recv.merge");
+            IrBlock* nomatch_bb = ir_block_create(ctx->cur_fn, "recv.nomatch");
+            
+            for (size_t i = 0; i < recv->arm_count; i++) {
+                char label[32];
+                snprintf(label, sizeof(label), "recv.arm%zu", i);
+                arm_blocks[i] = ir_block_create(ctx->cur_fn, my_strdup(label));
+            }
+            
+            /* Generate comparison chain */
+            for (size_t i = 0; i < recv->arm_count; i++) {
+                ReceiveArm* arm = &recv->arms[i];
                 
-                /* Create local scope block? AstBlock usually handles scope?
-                   But if pattern binds variable, we need to register it.
-                   We don't have block scoping in add_local (flat map). 
-                   So just add it. It might shadow. */
-                   
-                /* Create alloca for local var 'val' */
-                IrInstr* alloca = ir_build_alloca(ctx->cur_fn, ctx->cur_block, ir_type_i32());
+                uint32_t expected_tag = 0;
                 
-                /* Load tag from message (Offset 0) */
-                /* msg_val is ArnmMessage* */
-                /* We want *msg_val (as i64 or i32) */
-                /* Since tag is 64-bit, we load i64 then trunc? Or just load i64. */
-                
-                IrInstr* load_tag = ir_build_load(ctx->cur_fn, ctx->cur_block, ir_type_i64(), msg_val);
-                
-                /* Truncate to i32 (implicit or requires trunc instr?) */
-                /* IR builder usually handles types strictly. */
-                /* If we define val as i32, we need trunc. */
-                /* For now, assume implicit casting or just store execution happens? */
-                /* Actually ir_build_store takes value and ptr. */
-                /* If types differ... */
-                /* hack: store i64 into i32 slot? Stack slot size is usually 8 bytes anyway. */
-                /* Better: use i32 in load if we know tag is small. Tag is u64. */
-                /* Let's load i32 from offset 0. Little endian matches. */
-                
-                IrInstr* load_tag_32 = ir_build_load(ctx->cur_fn, ctx->cur_block, ir_type_i32(), msg_val);
-                
-                ir_build_store(ctx->cur_block, load_tag_32->result, alloca->result);
-                
-                /* Register pattern name */
-                if (arm->pattern && arm->pattern_len > 0) {
-                    add_local(ctx, arm->pattern, arm->pattern_len, alloca->result, ir_type_i32());
+                /* Check if pattern is integer literal */
+                if (arm->pattern && arm->pattern_len > 0 && isdigit(arm->pattern[0])) {
+                    expected_tag = (uint32_t)atoi(arm->pattern);
+                } else {
+                    /* Hash pattern name to get expected tag */
+                    expected_tag = 5381;
+                    for (uint32_t j = 0; j < arm->pattern_len; j++) {
+                        expected_tag = ((expected_tag << 5) + expected_tag) + (uint8_t)arm->pattern[j];
+                    }
                 }
                 
-                if (arm->body) {
-                    gen_block(ctx, arm->body);
+                /* Compare: tag_val == expected_tag */
+                IrValue expected = ir_val_const_i32((int32_t)expected_tag);
+                IrInstr* cmp = ir_build_cmp(ctx->cur_fn, ctx->cur_block, IR_EQ, tag_val, expected);
+                
+                /* Branch: if match goto arm_block, else continue to next check or nomatch */
+                IrBlock* next_check = (i + 1 < recv->arm_count) ? 
+                                      ir_block_create(ctx->cur_fn, "recv.check") : nomatch_bb;
+                ir_build_br(ctx->cur_block, cmp->result, arm_blocks[i], next_check);
+                
+                ctx->cur_block = next_check;
+            }
+                
+                /* Generate nomatch block - call panic */
+                ctx->cur_block = nomatch_bb;
+                ir_build_call(ctx->cur_fn, ctx->cur_block, "arnm_panic_nomatch", NULL, 0, ir_type_void());
+                ir_build_jmp(ctx->cur_block, merge_bb);
+                
+                /* Generate each arm body */
+                for (size_t i = 0; i < recv->arm_count; i++) {
+                    ReceiveArm* arm = &recv->arms[i];
+                    ctx->cur_block = arm_blocks[i];
+                    
+                    /* Bind pattern variable to the message tag value */
+                    IrInstr* alloca = ir_build_alloca(ctx->cur_fn, ctx->cur_block, ir_type_i32());
+                    ir_build_store(ctx->cur_block, tag_val, alloca->result);
+                    
+                    if (arm->pattern && arm->pattern_len > 0) {
+                        add_local(ctx, arm->pattern, arm->pattern_len, alloca->result, ir_type_i32());
+                    }
+                    
+                    if (arm->body) {
+                        gen_block(ctx, arm->body);
+                    }
+                    
+                    /* Jump to merge if not already terminated */
+                    if (!ctx->cur_block->tail || 
+                        (ctx->cur_block->tail->op != IR_JMP && 
+                         ctx->cur_block->tail->op != IR_BR && 
+                         ctx->cur_block->tail->op != IR_RET)) {
+                        ir_build_jmp(ctx->cur_block, merge_bb);
+                    }
                 }
+                
+                free(arm_blocks);
+                ctx->cur_block = merge_bb;
+            
+            break;
+        }
+        case AST_BREAK_STMT: {
+            /* Jump to break target (loop exit) */
+            if (ctx->break_bb) {
+                ir_build_jmp(ctx->cur_block, ctx->break_bb);
+            }
+            break;
+        }
+        case AST_CONTINUE_STMT: {
+            /* Jump to continue target (loop condition) */
+            if (ctx->continue_bb) {
+                ir_build_jmp(ctx->cur_block, ctx->continue_bb);
             }
             break;
         }
@@ -589,7 +800,23 @@ static IrValue gen_spawn_call(GenContext* ctx, AstCallExpr* call) {
     
     if (call->callee->kind == AST_IDENT_EXPR) {
          AstIdentExpr* id = &call->callee->as.ident;
-         target_name = copy_name(id->name, id->name_len);
+         
+         /* Check if it's an actor constructor */
+         Symbol* sym = symbol_lookup(&ctx->sema->symbols, id->name, id->name_len);
+         if (sym && sym->kind == SYMBOL_ACTOR) {
+             /* Target is Name_init */
+             char buffer[256];
+             snprintf(buffer, sizeof(buffer), "%.*s_init", (int)id->name_len, id->name);
+             target_name = my_strdup(buffer);
+             
+             /* Calculate state size */
+             if (sym->type) {
+                 state_size = sym->type->as.actor.field_count * 8;
+             }
+         } else {
+             /* Normal function */
+             target_name = copy_name(id->name, id->name_len);
+         }
     } else if (call->callee->kind == AST_FIELD_EXPR) {
          /* Actor.init -> Actor_init */
          AstFieldExpr* field = &call->callee->as.field;
@@ -719,6 +946,10 @@ bool ir_generate(SemaContext* ctx, AstProgram* program, IrModule* out_mod) {
     gen_ctx.sema = ctx;
     gen_ctx.mod = out_mod;
     gen_ctx.cur_fn = NULL;
+    gen_ctx.cur_block = NULL;
+    gen_ctx.cur_actor_type = NULL;
+    gen_ctx.break_bb = NULL;
+    gen_ctx.continue_bb = NULL;
     gen_ctx.cur_block = NULL;
     gen_ctx.cur_actor_type = NULL;
     gen_ctx.local_count = 0;

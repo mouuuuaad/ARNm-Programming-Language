@@ -75,9 +75,12 @@ typedef enum {
 /* ============================================================
  * Common Fields (embedded in all nodes)
  * ============================================================ */
+typedef struct Type Type;
+
 typedef struct {
     Span        span;           /* Source location */
-    AstType*    resolved_type;  /* Filled during type inference (NULL initially) */
+    AstType*    resolved_type;  /* Syntactic type annotation (optional) */
+    Type*       sema_type;      /* Semantic type (inferred) */
 } AstCommon;
 
 /* ============================================================

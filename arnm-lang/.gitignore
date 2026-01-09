@@ -1,0 +1,17 @@
+# Build artifacts
+build/
+runtime/build/
+*.o
+*.a
+*.s
+test_loops
+
+# Logs
+*.log
+
+# Editor
+.DS_Store
+.vscode/
+
+# Brain
+.agent/memory/

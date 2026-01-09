@@ -135,6 +135,26 @@ static void emit_instr(X86Context* ctx, IrInstr* instr) {
             fprintf(ctx->out, "\tidivq %%rbx\n");
             fprintf(ctx->out, "\tmovq %%rax, %s\n", dest);
             break;
+
+        case IR_MOD:
+            fprintf(ctx->out, "\tmovq %s, %%rax\n", op1);
+            fprintf(ctx->out, "\tcqo\n"); 
+            fprintf(ctx->out, "\tmovq %s, %%rbx\n", op2);
+            fprintf(ctx->out, "\tidivq %%rbx\n");
+            fprintf(ctx->out, "\tmovq %%rdx, %s\n", dest); /* Remainder in rdx */
+            break;
+            
+        case IR_AND:
+            fprintf(ctx->out, "\tmovq %s, %%rax\n", op1);
+            fprintf(ctx->out, "\tandq %s, %%rax\n", op2);
+            fprintf(ctx->out, "\tmovq %%rax, %s\n", dest);
+            break;
+            
+        case IR_OR:
+            fprintf(ctx->out, "\tmovq %s, %%rax\n", op1);
+            fprintf(ctx->out, "\torq %s, %%rax\n", op2);
+            fprintf(ctx->out, "\tmovq %%rax, %s\n", dest);
+            break;
             
         case IR_EQ: case IR_NE: case IR_LT: case IR_GT: case IR_LE: case IR_GE:
             fprintf(ctx->out, "\tmovq %s, %%rax\n", op1);
@@ -154,6 +174,10 @@ static void emit_instr(X86Context* ctx, IrInstr* instr) {
             
         case IR_JMP:
             {
+                if (!instr->target1) {
+                    fprintf(ctx->out, "\t# ERROR: JMP with null target\n");
+                    break;
+                }
                 char label[64];
                 get_label(label, ctx->cur_fn->name, instr->target1->id);
                 fprintf(ctx->out, "\tjmp %s\n", label);
@@ -162,6 +186,10 @@ static void emit_instr(X86Context* ctx, IrInstr* instr) {
             
         case IR_BR:
             {
+                if (!instr->target1 || !instr->target2) {
+                    fprintf(ctx->out, "\t# ERROR: BR with null target\n");
+                    break;
+                }
                 fprintf(ctx->out, "\tmovq %s, %%rax\n", op1);
                 fprintf(ctx->out, "\tcmpq $0, %%rax\n");
                 
@@ -195,6 +223,8 @@ static void emit_instr(X86Context* ctx, IrInstr* instr) {
                      const char* name = instr->op1.storage.global.name;
                      if (strcmp(name, "print") == 0) {
                          fprintf(ctx->out, "\tcall arnm_print_int\n");
+                     } else if (strcmp(name, "arnm_panic_nomatch") == 0) {
+                         fprintf(ctx->out, "\tcall arnm_panic_nomatch\n");
                      } else {
                          fprintf(ctx->out, "\tcall %s\n", name);
                      }
@@ -211,6 +241,11 @@ static void emit_instr(X86Context* ctx, IrInstr* instr) {
                 }
             }
             break;
+            
+        case IR_SEND:
+            /* send target, tag, data, size */
+             fprintf(ctx->out, "\t# Send not fully impl in simplified backend\n");
+             break;
 
         case IR_RECEIVE:
              fprintf(ctx->out, "\tmovq $0, %%rdi\n");

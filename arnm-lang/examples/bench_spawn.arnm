@@ -1,0 +1,16 @@
+// Benchmark: Spawn Throughput
+// Spawns 100,000 actors that simply exit immediately.
+
+fn worker() {
+    // Immediate exit
+}
+
+fn main() {
+    let mut i = 0;
+    // 50,000 to start - 100k might trigger memory limits depending on stack size
+    while (i < 50000) {
+        spawn worker();
+        i = i + 1;
+    }
+    print(i);
+}

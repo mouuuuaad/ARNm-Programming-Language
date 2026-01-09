@@ -1,0 +1,26 @@
+// Day 4 Test: Multi-arm Receive Block
+actor Counter {
+    let val: i32;
+    
+    fn init() {
+        self.val = 0;
+    }
+    
+    receive {
+        inc => {
+            self.val = self.val + 1;
+        }
+        dec => {
+            self.val = self.val - 1;
+        }
+        get => {
+            print(self.val);
+        }
+    }
+}
+
+fn main() {
+    let c = spawn Counter.init();
+    c ! 123456;  // inc hash
+    c ! 654321;  // dec hash
+}

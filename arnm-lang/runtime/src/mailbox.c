@@ -7,6 +7,7 @@
 #include "../include/scheduler.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 /* ============================================================
  * Message Implementation
@@ -35,6 +36,7 @@ ArnmMessage* message_create(uint64_t tag, void* data, size_t size) {
 }
 
 void message_free(ArnmMessage* msg) {
+    // fprintf(stderr, "[DEBUG] free msg=%p\n", msg);
     if (!msg) return;
     
     if (msg->data && msg->size > 0) {
@@ -100,8 +102,12 @@ bool mailbox_send(ArnmMailbox* mbox, uint64_t tag, void* data, size_t size) {
 
 ArnmMessage* mailbox_try_receive(ArnmMailbox* mbox) {
     if (!mbox) return NULL;
-    
+    // fprintf(stderr, "[DEBUG] try_receive mbox=%p\n", mbox);
     ArnmMessage* head = atomic_load(&mbox->head);
+    if (!head) {
+         fprintf(stderr, "[DEBUG] head is NULL!\n");
+         return NULL;
+    }
     ArnmMessage* next = atomic_load(&head->next);
     
     if (next == NULL) {
@@ -110,6 +116,7 @@ ArnmMessage* mailbox_try_receive(ArnmMailbox* mbox) {
     
     /* Dequeue: move head to next node */
     atomic_store(&mbox->head, next);
+    // fprintf(stderr, "[DEBUG] Dequeue next=%p tag=%lu\n", next, next->tag);
     atomic_fetch_sub(&mbox->count, 1);
     
     /* Free the old dummy node */

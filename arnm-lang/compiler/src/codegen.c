@@ -88,6 +88,80 @@ static void emit_instr(FILE* out, IrInstr* inst) {
             fprintf(out, "\n");
             break;
             
+        case IR_SUB:
+            fprintf(out, "  ");
+            emit_val(out, inst->result);
+            fprintf(out, " = sub ");
+            emit_type(out, inst->type);
+            fprintf(out, " ");
+            emit_val(out, inst->op1);
+            fprintf(out, ", ");
+            emit_val(out, inst->op2);
+            fprintf(out, "\n");
+            break;
+            
+        case IR_MUL:
+            fprintf(out, "  ");
+            emit_val(out, inst->result);
+            fprintf(out, " = mul ");
+            emit_type(out, inst->type);
+            fprintf(out, " ");
+            emit_val(out, inst->op1);
+            fprintf(out, ", ");
+            emit_val(out, inst->op2);
+            fprintf(out, "\n");
+            break;
+            
+        case IR_DIV:
+            /* Signed division */
+            fprintf(out, "  ");
+            emit_val(out, inst->result);
+            fprintf(out, " = sdiv ");
+            emit_type(out, inst->type);
+            fprintf(out, " ");
+            emit_val(out, inst->op1);
+            fprintf(out, ", ");
+            emit_val(out, inst->op2);
+            fprintf(out, "\n");
+            break;
+            
+        case IR_MOD:
+            /* Signed remainder */
+            fprintf(out, "  ");
+            emit_val(out, inst->result);
+            fprintf(out, " = srem ");
+            emit_type(out, inst->type);
+            fprintf(out, " ");
+            emit_val(out, inst->op1);
+            fprintf(out, ", ");
+            emit_val(out, inst->op2);
+            fprintf(out, "\n");
+            break;
+            
+        case IR_AND:
+            fprintf(out, "  ");
+            emit_val(out, inst->result);
+            fprintf(out, " = and ");
+            emit_type(out, inst->type);
+            fprintf(out, " ");
+            emit_val(out, inst->op1);
+            fprintf(out, ", ");
+            emit_val(out, inst->op2);
+            fprintf(out, "\n");
+            break;
+            
+        case IR_OR:
+            fprintf(out, "  ");
+            emit_val(out, inst->result);
+            fprintf(out, " = or ");
+            emit_type(out, inst->type);
+            fprintf(out, " ");
+            emit_val(out, inst->op1);
+            fprintf(out, ", ");
+            emit_val(out, inst->op2);
+            fprintf(out, "\n");
+            break;
+            
         case IR_EQ: case IR_NE: case IR_LT: case IR_LE: case IR_GT: case IR_GE:
             /* %r = icmp eq i32 %op1, %op2 */
             fprintf(out, "  ");
@@ -139,10 +213,10 @@ static void emit_instr(FILE* out, IrInstr* inst) {
             fprintf(out, " ");
             emit_val(out, inst->op1);
             fprintf(out, ", label ");
-            if (inst->target1->label) fprintf(out, "%%%s", inst->target1->label);
+            if (inst->target1->label) fprintf(out, "%%%s_%d", inst->target1->label, inst->target1->id);
             else fprintf(out, "%%b%d", inst->target1->id);
             fprintf(out, ", label ");
-            if (inst->target2->label) fprintf(out, "%%%s", inst->target2->label);
+            if (inst->target2->label) fprintf(out, "%%%s_%d", inst->target2->label, inst->target2->id);
             else fprintf(out, "%%b%d", inst->target2->id);
             fprintf(out, "\n");
             break;
@@ -150,7 +224,7 @@ static void emit_instr(FILE* out, IrInstr* inst) {
         case IR_JMP:
             /* br label %dest */
             fprintf(out, "  br label ");
-            if (inst->target1->label) fprintf(out, "%%%s", inst->target1->label);
+            if (inst->target1->label) fprintf(out, "%%%s_%d", inst->target1->label, inst->target1->id);
             else fprintf(out, "%%b%d", inst->target1->id);
             fprintf(out, "\n");
             break;
@@ -160,8 +234,9 @@ static void emit_instr(FILE* out, IrInstr* inst) {
 }
 
 static void emit_block(FILE* out, IrBlock* block) {
+    /* Always include block ID to ensure unique labels */
     if (block->label) {
-        fprintf(out, "%s:\n", block->label);
+        fprintf(out, "%s_%d:\n", block->label, block->id);
     } else {
         fprintf(out, "b%d:\n", block->id);
     }
@@ -216,7 +291,8 @@ bool codegen_emit(IrModule* mod, FILE* out) {
     fprintf(out, "declare ptr @arnm_spawn(ptr, ptr)\n");
     fprintf(out, "declare void @arnm_send(ptr, i32, ptr, i64)\n");
     fprintf(out, "declare ptr @arnm_receive(ptr)\n");
-    fprintf(out, "declare ptr @arnm_self()\n\n");
+    fprintf(out, "declare ptr @arnm_self()\n");
+    fprintf(out, "declare void @arnm_panic_nomatch()\n\n");
 
     IrFunction* fn = mod->funcs;
     while (fn) {

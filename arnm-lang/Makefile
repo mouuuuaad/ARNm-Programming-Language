@@ -1,4 +1,3 @@
-# ARNm Compiler Makefile
 
 CC := gcc
 CFLAGS := -std=c11 -Wall -Wextra -Wpedantic -O2 -g
@@ -9,7 +8,6 @@ INC_DIR := compiler/include
 TEST_DIR := compiler/tests
 BUILD_DIR := build
 
-# Source files
 SRCS := $(SRC_DIR)/lexer.c $(SRC_DIR)/parser.c $(SRC_DIR)/types.c \
         $(SRC_DIR)/symbol.c $(SRC_DIR)/sema.c $(SRC_DIR)/ir.c $(SRC_DIR)/irgen.c \
         $(SRC_DIR)/codegen.c $(SRC_DIR)/main.c
@@ -19,7 +17,6 @@ ASM_OBJ := $(BUILD_DIR)/codegen_x86.o
 
 OBJS := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRCS)) $(ASM_OBJ)
 
-# Test files
 TEST_LEXER_SRCS := $(TEST_DIR)/test_lexer.c $(SRC_DIR)/lexer.c
 TEST_PARSER_SRCS := $(TEST_DIR)/test_parser.c $(SRC_DIR)/lexer.c $(SRC_DIR)/parser.c
 TEST_SEMA_SRCS := $(TEST_DIR)/test_sema.c $(SRC_DIR)/lexer.c $(SRC_DIR)/parser.c \
@@ -99,12 +96,12 @@ $(CRT0_OBJ): $(CRT0_SRC) | dirs
 	$(CC) $(CFLAGS) -I$(RUNTIME_DIR)/include -c -o $@ $<
 
 integration: dirs $(TARGET) runtime $(CRT0_OBJ)
-	# 1. Compile ARNm to LLVM IR
-	./$(TARGET) --emit-llvm examples/pingpong.arnm > $(BUILD_DIR)/pingpong.ll
-	# 2. Compile LLVM IR to object file
-	clang -c -o $(BUILD_DIR)/pingpong.o $(BUILD_DIR)/pingpong.ll
+	# 1. Compile ARNm to x86_64 assembly
+	./$(TARGET) --emit-asm examples/pingpong.arnm > $(BUILD_DIR)/pingpong.s
+	# 2. Assemble to object file
+	gcc -c -o $(BUILD_DIR)/pingpong.o $(BUILD_DIR)/pingpong.s
 	# 3. Link everything
-	clang -o $(BUILD_DIR)/pingpong $(CRT0_OBJ) $(BUILD_DIR)/pingpong.o -L$(RUNTIME_DIR)/build -larnm -lpthread
+	gcc -o $(BUILD_DIR)/pingpong $(CRT0_OBJ) $(BUILD_DIR)/pingpong.o -L$(RUNTIME_DIR)/build -larnm -lpthread
 	@echo "Build complete: $(BUILD_DIR)/pingpong"
 
 clean:

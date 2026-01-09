@@ -27,15 +27,14 @@ static int tests_passed = 0;
     } \
 } while(0)
 
-static AstProgram* parse_and_analyze(const char* src, SemaContext* ctx) {
+static AstProgram* parse_and_analyze(const char* src, SemaContext* ctx, AstArena* arena) {
     Lexer lexer;
     lexer_init(&lexer, src, strlen(src));
     
-    AstArena arena;
-    ast_arena_init(&arena, 64 * 1024);
+    ast_arena_init(arena, 64 * 1024);
     
     Parser parser;
-    parser_init(&parser, &lexer, &arena);
+    parser_init(&parser, &lexer, arena);
     AstProgram* prog = parser_parse_program(&parser);
     
     if (!parser_success(&parser)) return NULL;
@@ -52,94 +51,116 @@ static AstProgram* parse_and_analyze(const char* src, SemaContext* ctx) {
 
 TEST(simple_function) {
     SemaContext ctx;
-    AstProgram* prog = parse_and_analyze("fn main() { }", &ctx);
+    AstArena arena;
+    AstProgram* prog = parse_and_analyze("fn main() { }", &ctx, &arena);
     ASSERT(prog != NULL);
     ASSERT(!ctx.had_error);
     sema_destroy(&ctx);
+    ast_arena_destroy(&arena);
 }
 
 TEST(variable_declaration) {
     SemaContext ctx;
-    AstProgram* prog = parse_and_analyze("fn main() { let x = 42; }", &ctx);
+    AstArena arena;
+    AstProgram* prog = parse_and_analyze("fn main() { let x = 42; }", &ctx, &arena);
     ASSERT(prog != NULL);
     ASSERT(!ctx.had_error);
     sema_destroy(&ctx);
+    ast_arena_destroy(&arena);
 }
 
 TEST(undefined_variable) {
     SemaContext ctx;
-    parse_and_analyze("fn main() { let x = y; }", &ctx);
+    AstArena arena;
+    parse_and_analyze("fn main() { let x = y; }", &ctx, &arena);
     ASSERT(ctx.had_error);
     sema_destroy(&ctx);
+    ast_arena_destroy(&arena);
 }
 
 TEST(binary_operators) {
     SemaContext ctx;
-    AstProgram* prog = parse_and_analyze("fn main() { let x = 1 + 2; }", &ctx);
+    AstArena arena;
+    AstProgram* prog = parse_and_analyze("fn main() { let x = 1 + 2; }", &ctx, &arena);
     ASSERT(prog != NULL);
     ASSERT(!ctx.had_error);
     sema_destroy(&ctx);
+    ast_arena_destroy(&arena);
 }
 
 TEST(comparison_returns_bool) {
     SemaContext ctx;
+    AstArena arena;
     AstProgram* prog = parse_and_analyze(
-        "fn main() { let x = 1 < 2; if x { } }", &ctx);
+        "fn main() { let x = 1 < 2; if x { } }", &ctx, &arena);
     ASSERT(prog != NULL);
     ASSERT(!ctx.had_error);
     sema_destroy(&ctx);
+    ast_arena_destroy(&arena);
 }
 
 TEST(function_call) {
     SemaContext ctx;
+    AstArena arena;
     AstProgram* prog = parse_and_analyze(
-        "fn foo() { } fn main() { foo(); }", &ctx);
+        "fn foo() { } fn main() { foo(); }", &ctx, &arena);
     ASSERT(prog != NULL);
     ASSERT(!ctx.had_error);
     sema_destroy(&ctx);
+    ast_arena_destroy(&arena);
 }
 
 TEST(spawn_expression) {
     SemaContext ctx;
+    AstArena arena;
     AstProgram* prog = parse_and_analyze(
-        "fn worker() { } fn main() { let p = spawn worker(); }", &ctx);
+        "fn worker() { } fn main() { let p = spawn worker(); }", &ctx, &arena);
     ASSERT(prog != NULL);
     ASSERT(!ctx.had_error);
     sema_destroy(&ctx);
+    ast_arena_destroy(&arena);
 }
 
 TEST(message_send) {
     SemaContext ctx;
+    AstArena arena;
     AstProgram* prog = parse_and_analyze(
-        "fn main() { let p = spawn worker(); p ! msg; } fn worker() { }", &ctx);
+        "fn main() { let p = spawn worker(); p ! msg; } fn worker() { }", &ctx, &arena);
     ASSERT(prog != NULL);
     /* May have errors for undefined 'msg' */
     sema_destroy(&ctx);
+    ast_arena_destroy(&arena);
 }
 
 TEST(actor_definition) {
     SemaContext ctx;
+    AstArena arena;
     AstProgram* prog = parse_and_analyze(
-        "actor Counter { fn inc() { } }", &ctx);
+        "actor Counter { fn inc() { } }", &ctx, &arena);
     ASSERT(prog != NULL);
     ASSERT(!ctx.had_error);
     sema_destroy(&ctx);
+    ast_arena_destroy(&arena);
 }
 
 TEST(break_outside_loop) {
     SemaContext ctx;
-    parse_and_analyze("fn main() { break; }", &ctx);
+    AstArena arena;
+    parse_and_analyze("fn main() { break; }", &ctx, &arena);
     ASSERT(ctx.had_error);
     sema_destroy(&ctx);
+    ast_arena_destroy(&arena);
 }
 
 TEST(break_inside_loop) {
     SemaContext ctx;
+    AstArena arena;
     AstProgram* prog = parse_and_analyze(
-        "fn main() { while true { break; } }", &ctx);
+        "fn main() { while true { break; } }", &ctx, &arena);
     ASSERT(prog != NULL);
     ASSERT(!ctx.had_error);
     sema_destroy(&ctx);
+    ast_arena_destroy(&arena);
 }
 
 /* ============================================================

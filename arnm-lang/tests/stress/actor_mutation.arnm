@@ -1,0 +1,39 @@
+actor Counter {
+    let value: i32;
+    
+    fn init() {
+        self.value = 0;
+    }   
+    
+    receive {
+        increment => {
+            self.value = self.value + 1;
+        }
+        decrement => {
+            self.value = self.value - 1;
+        }
+        multiply => {
+            self.value = self.value * 2;
+        }
+        divide => {
+            self.value = self.value / 2;
+        }
+        reset => {
+            self.value = 0;
+        }
+    }
+}
+
+fn main() {
+    let c1 = spawn Counter.init();
+    let c2 = spawn Counter.init();
+    
+    c1 ! 1;
+    c2 ! 1;
+    c1 ! 1;
+    c2 ! 1;
+    c1 ! 2;
+    c2 ! 3;
+    
+    print(42);
+}

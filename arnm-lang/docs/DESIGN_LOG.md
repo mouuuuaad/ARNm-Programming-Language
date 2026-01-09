@@ -1,155 +1,166 @@
-# ARNm Design Log
+# ARNm DESIGN LOG
 
-This document records architectural decisions, trade-offs, and rationale for the ARNm compiler and runtime.
+> **This document is the authority.** Code must obey it, not the other way around.
+
+## Philosophy
+
+ARNm is a **systems-level organism**, not a syntax experiment. Every decision must be:
+- **Reversible** — can remove without breaking the world
+- **Observable** — can see what's happening
+- **Measurable** — can prove correctness
+
+## Core Metaphor (Biology)
+
+| Concept     | ARNm Element   |
+|-------------|----------------|
+| Cell        | Runtime        |
+| Organelle   | Process        |
+| Protein     | Message        |
+| Metabolism  | Scheduler      |
+| Nutrients   | Memory         |
+
+If a feature does not fit this metaphor → question it.
 
 ---
 
-## Phase I: Bootstrap Frontend
+## Runtime Invariants (MUST NEVER BREAK)
 
-### Decision 1: Zero-Allocation Lexer
+### INV-001: Process Isolation
+A process cannot directly access another process's stack or state.
+Interaction happens ONLY through messages.
 
-**Date**: 2026-01-09
+### INV-002: Message Ownership
+A message is owned by exactly ONE process at any time.
+Transfer is explicit. No shared mutable state.
 
-**Context**: The lexer is the first stage of compilation, processing every byte of source code.
+### INV-003: Deterministic Scheduling  
+Given the same inputs and random seed, execution order is reproducible.
+FIFO scheduling within priority classes.
 
-**Decision**: Tokens reference source memory directly via pointer + length.
+### INV-004: Graceful Shutdown
+Every spawned process must be accounted for at shutdown.
+No orphans. No leaks. Clean termination.
+
+### INV-005: Observable State
+At any point, the system can report:
+- Number of live processes
+- Mailbox depths  
+- Scheduler queue state
+
+---
+
+## Execution Model (MVP)
+
+```
+┌─────────────────────────────────────────────┐
+│              ARNm Runtime (OS Process)       │
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐      │
+│  │ Process │  │ Process │  │ Process │      │
+│  │  P1     │  │  P2     │  │  P3     │      │
+│  │ [stack] │  │ [stack] │  │ [stack] │      │
+│  │ [mbox]  │  │ [mbox]  │  │ [mbox]  │      │
+│  └─────────┘  └─────────┘  └─────────┘      │
+│                    │                         │
+│            ┌───────▼───────┐                 │
+│            │   Scheduler   │                 │
+│            │ (cooperative) │                 │
+│            └───────────────┘                 │
+│                    │                         │
+│            ┌───────▼───────┐                 │
+│            │  Shared Heap  │                 │
+│            │   (ARC)       │                 │
+│            └───────────────┘                 │
+└─────────────────────────────────────────────┘
+```
+
+### Why Cooperative (Not Preemptive)?
+- Simpler debugging
+- Deterministic yielding
+- Explicit control points (receive, await, sleep)
+- Preemption comes later when correctness is proven
+
+---
+
+## Memory Model (MVP ARC)
+
+Rules:
+1. Every heap object has a refcount (uint32_t)
+2. Increment on `send` (message enters another's domain)
+3. Decrement on `receive` completion (message consumed)
+4. Free when refcount reaches zero
+
+NOT in MVP:
+- Cycle detection
+- Weak references
+- Generational GC
+
+But: **API assumes cycles will exist**. Design for future removal.
+
+---
+
+## Process Lifecycle
+
+```
+spawn() ──► READY ──► RUNNING ──► WAITING ──► READY ──► ...
+                          │                      │
+                          └──────► DEAD ◄────────┘
+```
+
+States:
+- **READY**: In scheduler queue, waiting for CPU
+- **RUNNING**: Currently executing
+- **WAITING**: Blocked on receive/await
+- **DEAD**: Terminated, awaiting cleanup
+
+---
+
+## Design Decisions Log
+
+### 2026-01-09: MVP Scope Lock
+
+**Decision**: Lock MVP scope to:
+- actors, spawn, send, receive, print
+- Linux x86_64 only
+- Cooperative scheduling
+- ARC memory
+
+**Rationale**: Prove sovereignty first. Optimize later.
+
+### 2026-01-09: Native x86_64 Backend
+
+**Decision**: Use native x86_64 assembly output instead of LLVM IR for MVP.
 
 **Rationale**:
-- Eliminates heap allocation overhead during tokenization
-- Cache-friendly: tokens are small (24 bytes) and sequential access into source buffer
-- Source buffer lifetime is controlled by the caller
+- Zero external dependencies (no clang/llvm required)
+- Complete control over generated code
+- GCC available everywhere
 
-**Trade-offs**:
-- Source buffer must remain valid for token lifetime
-- Cannot modify source after tokenization begins
-- Requires caller to manage source memory
+### 2026-01-09: Day 4 Language Expansion
 
----
-
-### Decision 2: State-Machine Lexer Design
-
-**Date**: 2026-01-09
-
-**Context**: Lexer implementation approach—table-driven vs switch-based.
-
-**Decision**: Switch-based state machine with character classification inline functions.
+**Decision**: Add three features justified by execution needs:
+1. **Full arithmetic operators** (`-`, `*`, `/`, `%`)
+2. **Boolean literals and logical operators** (`true`, `false`, `&&`, `||`)
+3. **Break/continue statements** for loop control
 
 **Rationale**:
-- Switch statements compile to efficient jump tables
-- Inline classification functions enable compiler optimizations
-- More readable and maintainable than large lookup tables
-- Branch prediction works well for common ASCII characters
+- Arithmetic: Only `+` was implemented; basic programs require subtraction and multiplication
+- Booleans: `while (true)` patterns needed for infinite loops with break
+- Break/continue: No way to exit loops early without workarounds
+
+**Deferred**: Message tag matching in receive blocks (requires more design work)
+
+**Impact on Runtime**: None. All features are compile-time only.
 
 ---
 
-### Decision 3: Keyword Recognition via Binary Search
+## Anti-Patterns (DO NOT DO)
 
-**Date**: 2026-01-09
-
-**Context**: Keywords must be distinguished from identifiers efficiently.
-
-**Decision**: Sorted keyword table with binary search (O(log n)).
-
-**Alternatives Considered**:
-1. Perfect hash (O(1) but complex to maintain)
-2. Trie (O(k) but higher memory)
-3. Linear scan (O(n) too slow)
-
-**Rationale**:
-- 26 keywords means ~5 comparisons worst case
-- Simple to add new keywords
-- Zero additional memory allocation
-- Good cache behavior with sorted table
+1. **Over-generalization** — Don't build abstractions before you need them 3 times
+2. **Rust-level safety** — Not yet. Correctness before provability.
+3. **Micro-optimization** — Profile first. Guess never.
+4. **Syntax sugar** — Ugly but working > pretty but broken
 
 ---
 
-### Decision 4: AST Arena Allocation
+*Last updated: 2026-01-09*
 
-**Date**: 2026-01-09
-
-**Context**: AST nodes have varying lifetimes but are all freed together.
-
-**Decision**: Single arena allocator for all AST nodes.
-
-**Rationale**:
-- Single allocation site eliminates fragmentation
-- O(1) deallocation (free entire arena)
-- No per-node free needed
-- Memory locality improves cache performance
-
-**Implementation**:
-- `ast_arena_init()` allocates a contiguous buffer
-- `ast_arena_alloc()` bumps pointer (8-byte aligned)
-- `ast_arena_destroy()` frees entire buffer
-
----
-
-### Decision 5: Tagged Union AST Nodes
-
-**Date**: 2026-01-09
-
-**Context**: AST needs to represent many node types with exhaustive matching.
-
-**Decision**: Tagged union pattern—`kind` enum + union of structs.
-
-**Rationale**:
-- Single allocation per node
-- Compiler warns on non-exhaustive switch
-- Fixed-size nodes improve cache behavior
-- Natural mapping to C struct layout
-
----
-
-### Decision 6: Pratt Parser for Expressions
-
-**Date**: 2026-01-09
-
-**Context**: Expression parsing with correct precedence.
-
-**Decision**: Pratt (precedence climbing) parser within recursive descent.
-
-**Rationale**:
-- Handles precedence elegantly without explicit grammar factoring
-- Easy to add new operators with precedence table
-- Natural left/right associativity control
-- Integrates cleanly with recursive descent for statements
-
----
-
-### Decision 7: Message Send as Infix Operator
-
-**Date**: 2026-01-09
-
-**Context**: ARNm uses `!` for message sending: `actor ! message`.
-
-**Decision**: Parse `!` as binary infix operator with dedicated precedence.
-
-**Rationale**:
-- Erlang-inspired syntax is familiar to concurrent programmers
-- Distinguished from logical NOT (prefix `!`)
-- Clear visual separation between target and message
-- Precedence below comparison, above logical operators
-
----
-
-## Pending Decisions
-
-### Runtime Scheduler Strategy
-
-Options under consideration:
-1. Work-stealing with per-core run queues
-2. Global queue with local caching
-3. Hybrid approach
-
-Decision deferred until Phase III runtime implementation.
-
----
-
-### Cycle Detection Algorithm
-
-Options under consideration:
-1. Trial deletion (simpler, may have pauses)
-2. Concurrent mark-sweep (complex, lower latency)
-3. Bacon-Rajan collector (proven for ARC supplements)
-
-Decision deferred until Phase III memory subsystem.

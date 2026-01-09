@@ -37,6 +37,7 @@ typedef enum {
     TYPE_ARRAY,         /* [T] */
     TYPE_OPTIONAL,      /* T? */
     TYPE_PROCESS,       /* Process handle (spawn result) */
+    TYPE_STRUCT,        /* struct */
     TYPE_ERROR,         /* Type error placeholder */
 } TypeKind;
 
@@ -96,6 +97,14 @@ typedef struct {
     Type*   element_type;
 } TypeArray;
 
+/* Struct type */
+typedef struct {
+    const char* name;
+    uint32_t    name_len;
+    TypeField*  fields;
+    size_t      field_count;
+} TypeStruct;
+
 /* Optional type */
 typedef struct {
     Type*   inner_type;
@@ -108,6 +117,7 @@ struct Type {
         TypeVar     var;        /* TYPE_VAR */
         TypeFn      fn;         /* TYPE_FN */
         TypeActor   actor;      /* TYPE_ACTOR */
+        TypeStruct  struct_type;/* TYPE_STRUCT */
         TypeArray   array;      /* TYPE_ARRAY */
         TypeOptional optional;  /* TYPE_OPTIONAL */
     } as;
@@ -154,6 +164,7 @@ Type* type_array(TypeArena* arena, Type* elem);
 Type* type_optional(TypeArena* arena, Type* inner);
 Type* type_process(TypeArena* arena, Type* actor_type);
 Type* type_actor(TypeArena* arena, const char* name, uint32_t name_len);
+Type* type_struct(TypeArena* arena, const char* name, uint32_t name_len);
 
 /* ============================================================
  * Type Operations

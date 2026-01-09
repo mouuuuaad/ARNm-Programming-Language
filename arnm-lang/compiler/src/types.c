@@ -42,16 +42,19 @@ void type_arena_destroy(TypeArena* arena) {
  * Primitive Type Singletons (cached)
  * ============================================================ */
 
+/* Static storage for primitive types - these are never freed */
+static Type primitive_storage[16];
 static Type* primitive_cache[16] = {0};
 
 static Type* get_or_create_primitive(TypeArena* arena, TypeKind kind) {
+    (void)arena;  /* Primitives don't use arena - they're eternal singletons */
+    
     if (primitive_cache[kind]) {
         return primitive_cache[kind];
     }
     
-    Type* type = type_arena_alloc(arena, sizeof(Type));
-    if (!type) return NULL;
-    
+    /* Use static storage instead of arena allocation */
+    Type* type = &primitive_storage[kind];
     type->kind = kind;
     type->perm = PERM_UNKNOWN;
     primitive_cache[kind] = type;
@@ -149,6 +152,19 @@ Type* type_actor(TypeArena* arena, const char* name, uint32_t name_len) {
     return type;
 }
 
+Type* type_struct(TypeArena* arena, const char* name, uint32_t name_len) {
+    Type* type = type_arena_alloc(arena, sizeof(Type));
+    if (!type) return NULL;
+    
+    type->kind = TYPE_STRUCT;
+    type->perm = PERM_UNKNOWN;
+    type->as.struct_type.name = name;
+    type->as.struct_type.name_len = name_len;
+    type->as.struct_type.fields = NULL;
+    type->as.struct_type.field_count = 0;
+    return type;
+}
+
 /* ============================================================
  * Type Resolution
  * ============================================================ */
@@ -156,8 +172,17 @@ Type* type_actor(TypeArena* arena, const char* name, uint32_t name_len) {
 Type* type_resolve(Type* type) {
     if (!type) return NULL;
     
+    /* Depth limit to prevent infinite loop on cyclic type variables */
+    int depth = 0;
+    const int MAX_DEPTH = 1000;
+    
     while (type->kind == TYPE_VAR && type->as.var.instance) {
         type = type->as.var.instance;
+        if (++depth > MAX_DEPTH) {
+            /* Cyclic type detected - break the cycle */
+            fprintf(stderr, "[ARNM] Warning: cyclic type detected in type_resolve\n");
+            return type;
+        }
     }
     return type;
 }
@@ -197,6 +222,10 @@ bool type_equals(Type* a, Type* b) {
         case TYPE_ACTOR:
             if (a->as.actor.name_len != b->as.actor.name_len) return false;
             return memcmp(a->as.actor.name, b->as.actor.name, a->as.actor.name_len) == 0;
+
+        case TYPE_STRUCT:
+            if (a->as.struct_type.name_len != b->as.struct_type.name_len) return false;
+            return memcmp(a->as.struct_type.name, b->as.struct_type.name, a->as.struct_type.name_len) == 0;
             
         default:
             return true;  /* Primitive types match by kind */
@@ -247,14 +276,16 @@ bool type_unify(Type* a, Type* b) {
     /* Error type unifies with anything */
     if (a->kind == TYPE_ERROR || b->kind == TYPE_ERROR) return true;
     
-    /* Type variable: bind it */
+    /* Type variable: bind it (but not to itself!) */
     if (a->kind == TYPE_VAR) {
         if (occurs_in(&a->as.var, b)) return false;  /* Infinite type */
+        if (a == b) return true;  /* Don't bind to self */
         a->as.var.instance = b;
         return true;
     }
     if (b->kind == TYPE_VAR) {
         if (occurs_in(&b->as.var, a)) return false;
+        if (a == b) return true;  /* Don't bind to self */
         b->as.var.instance = a;
         return true;
     }
@@ -332,6 +363,7 @@ const char* type_kind_name(TypeKind kind) {
         case TYPE_CHAR:     return "char";
         case TYPE_FN:       return "fn";
         case TYPE_ACTOR:    return "actor";
+        case TYPE_STRUCT:   return "struct";
         case TYPE_ARRAY:    return "array";
         case TYPE_OPTIONAL: return "optional";
         case TYPE_PROCESS:  return "Process";
@@ -385,6 +417,10 @@ int type_print(Type* type, char* buf, size_t buf_size) {
         case TYPE_ACTOR:
             return snprintf(buf, buf_size, "%.*s", 
                 (int)type->as.actor.name_len, type->as.actor.name);
+
+        case TYPE_STRUCT:
+            return snprintf(buf, buf_size, "%.*s", 
+                (int)type->as.struct_type.name_len, type->as.struct_type.name);
                 
         default:
             return snprintf(buf, buf_size, "%s", type_kind_name(type->kind));

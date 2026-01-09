@@ -1,0 +1,16 @@
+// Day 4 Test: Boolean and Break/Continue
+fn main() {
+    let count = 0;
+    
+    // Test while with break
+    while (true) {
+        print(count);
+        count = count + 1;
+        if (count == 5) {
+            break;
+        }
+    }
+    
+    // Count should be 5 here
+    print(count);
+}

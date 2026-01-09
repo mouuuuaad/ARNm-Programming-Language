@@ -85,6 +85,9 @@ typedef enum {
     /* Comparison */
     IR_EQ, IR_NE, IR_LT, IR_LE, IR_GT, IR_GE,
     
+    /* Logical */
+    IR_AND, IR_OR,
+    
     /* Control Flow */
     IR_RET,         /* ret %val */
     IR_BR,          /* br %cond, %then, %else */
@@ -170,6 +173,12 @@ IrBlock*    ir_block_create(IrFunction* fn, const char* label);
 IrInstr* ir_build_ret(IrBlock* block, IrValue val);
 IrInstr* ir_build_ret_void(IrBlock* block); 
 IrInstr* ir_build_add(IrFunction* fn, IrBlock* block, IrValue lhs, IrValue rhs);
+IrInstr* ir_build_sub(IrFunction* fn, IrBlock* block, IrValue lhs, IrValue rhs);
+IrInstr* ir_build_mul(IrFunction* fn, IrBlock* block, IrValue lhs, IrValue rhs);
+IrInstr* ir_build_div(IrFunction* fn, IrBlock* block, IrValue lhs, IrValue rhs);
+IrInstr* ir_build_mod(IrFunction* fn, IrBlock* block, IrValue lhs, IrValue rhs);
+IrInstr* ir_build_and(IrFunction* fn, IrBlock* block, IrValue lhs, IrValue rhs);
+IrInstr* ir_build_or(IrFunction* fn, IrBlock* block, IrValue lhs, IrValue rhs);
 IrInstr* ir_build_alloca(IrFunction* fn, IrBlock* block, IrType type);
 IrInstr* ir_build_store(IrBlock* block, IrValue val, IrValue ptr);
 IrInstr* ir_build_load(IrFunction* fn, IrBlock* block, IrType type, IrValue ptr);
@@ -184,6 +193,7 @@ IrInstr* ir_build_cmp(IrFunction* fn, IrBlock* block, IrOpcode op, IrValue lhs, 
 /* Helpers */
 IrValue ir_val_var(uint32_t id, IrType type);
 IrValue ir_val_const_i32(int32_t i);
+IrValue ir_val_const_bool(bool b);
 IrType  ir_type_i32(void);
 IrType  ir_type_i64(void);
 IrType  ir_type_bool(void);

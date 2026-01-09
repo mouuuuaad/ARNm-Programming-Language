@@ -8,6 +8,7 @@
 #include "../include/mailbox.h"
 #include "../include/memory.h"
 #include <stdlib.h>
+#include <stdio.h>
 
 /* ============================================================
  * Runtime Lifecycle
@@ -68,7 +69,8 @@ int arnm_send(ArnmProcess* target, uint64_t tag, void* data, size_t size) {
 
 ArnmMessage* arnm_receive(void) {
     ArnmProcess* proc = proc_current();
-    if (!proc || !proc->mailbox) return NULL;
+    if (!proc) return NULL;
+    if (!proc->mailbox) return NULL;
     return mailbox_receive(proc->mailbox);
 }
 
@@ -92,6 +94,11 @@ void* arnm_message_data(ArnmMessage* msg) {
 
 size_t arnm_message_size(ArnmMessage* msg) {
     return msg ? msg->size : 0;
+}
+
+void arnm_panic_nomatch(void) {
+    fprintf(stderr, "[ARNM PANIC] Unmatched message in receive block\n");
+    abort();
 }
 
 /* ============================================================

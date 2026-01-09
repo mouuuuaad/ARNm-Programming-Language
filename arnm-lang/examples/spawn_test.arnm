@@ -1,0 +1,12 @@
+// Test spawning multiple processes
+fn worker() {
+    print(999);
+}
+
+fn main() {
+    print(1);
+    spawn(worker());
+    print(2);
+    spawn(worker());  
+    print(3);
+}

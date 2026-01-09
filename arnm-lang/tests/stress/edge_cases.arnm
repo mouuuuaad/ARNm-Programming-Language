@@ -1,0 +1,20 @@
+fn main() {
+    let a = 10 / 3;
+    let b = 10 % 3;
+    let c = -10 / 3;
+    let d = -10 % 3;
+    
+    let flag = true;
+    let result = false && flag;
+    let result2 = true || flag;
+    
+    let complex = ((1 + 2) * 3 - 4) / 5 % 6;
+    
+    let chain = 1 < 2 < 3;
+    
+    let bad = true + 1;
+    
+    print(a);
+    print(b);
+    print(complex);
+}

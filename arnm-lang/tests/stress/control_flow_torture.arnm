@@ -1,0 +1,35 @@
+// Day 8 Stress Test 1: Hostile Control Flow
+// Combine nested loops, break/continue, and conditionals
+
+fn main() {
+    let mut outer = 0;
+    
+    while (outer < 10) {
+        let mut inner = 0;
+        
+        while (inner < 10) {
+            if (inner == 5) {
+                if (outer == 3) {
+                    break;
+                }
+                inner = inner + 1;
+                continue;
+            }
+            
+            if (outer * inner > 40) {
+                outer = 999;
+                break;
+            }
+            
+            inner = inner + 1;
+        }
+        
+        if (outer > 100) {
+            break;
+        }
+        
+        outer = outer + 1;
+    }
+    
+    print(outer);
+}
