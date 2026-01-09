@@ -1,0 +1,8 @@
+fn worker(arg: i32) {
+    let x = arg;
+}
+
+fn main() {
+    let p = spawn worker(123);
+    p ! 42;
+}

@@ -1,0 +1,22 @@
+actor Counter {
+    let count: i32;
+
+    fn init() {
+        self.count = 0;
+        print(self.count);
+    }
+
+    receive {
+        val => {
+            self.count = self.count + val;
+            print(self.count);
+        }
+    }
+}
+
+fn main() {
+    let c = spawn Counter.init();
+    c ! 10;
+    c ! 20;
+    c ! 30;
+}

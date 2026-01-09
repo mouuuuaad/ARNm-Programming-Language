@@ -1,0 +1,212 @@
+(* ARNm Language Grammar - EBNF Specification *)
+(* 
+ * This grammar is LL(1)-friendly and suitable for hand-written 
+ * recursive descent parsing. No parser generators required.
+ *)
+
+(* ============================================================ *)
+(* Top-Level Structure                                          *)
+(* ============================================================ *)
+
+program     = { declaration } ;
+
+declaration = function_decl
+            | actor_decl
+            | struct_decl
+            ;
+
+(* ============================================================ *)
+(* Functions                                                    *)
+(* ============================================================ *)
+
+function_decl = "fn" IDENT "(" [ param_list ] ")" [ "->" type ] block ;
+
+param_list    = param { "," param } ;
+
+param         = [ "mut" ] IDENT ":" type ;
+
+(* ============================================================ *)
+(* Actors                                                       *)
+(* ============================================================ *)
+
+actor_decl    = "actor" IDENT "{" { actor_item } "}" ;
+
+actor_item    = function_decl
+              | receive_block
+              ;
+
+receive_block = "receive" "{" { receive_arm } "}" ;
+
+receive_arm   = pattern "=>" block ;
+
+pattern       = IDENT ;  (* Simplified for bootstrap - will expand later *)
+
+(* ============================================================ *)
+(* Structs                                                      *)
+(* ============================================================ *)
+
+struct_decl   = "struct" IDENT "{" [ field_list ] "}" ;
+
+field_list    = field { "," field } ;
+
+field         = IDENT ":" type ;
+
+(* ============================================================ *)
+(* Statements                                                   *)
+(* ============================================================ *)
+
+block         = "{" { statement } "}" ;
+
+statement     = let_stmt
+              | return_stmt
+              | if_stmt
+              | while_stmt
+              | for_stmt
+              | loop_stmt
+              | break_stmt
+              | continue_stmt
+              | spawn_stmt
+              | receive_stmt
+              | expr_stmt
+              ;
+
+let_stmt      = "let" [ "mut" ] IDENT [ ":" type ] [ "=" expression ] ";" ;
+
+return_stmt   = "return" [ expression ] ";" ;
+
+if_stmt       = "if" expression block [ "else" ( block | if_stmt ) ] ;
+
+while_stmt    = "while" expression block ;
+
+for_stmt      = "for" IDENT "in" expression block ;
+
+loop_stmt     = "loop" block ;
+
+break_stmt    = "break" ";" ;
+
+continue_stmt = "continue" ";" ;
+
+spawn_stmt    = "spawn" expression ";" ;
+
+receive_stmt  = "receive" "{" { receive_arm } "}" ;
+
+expr_stmt     = expression ";" ;
+
+(* ============================================================ *)
+(* Expressions (Precedence from lowest to highest)              *)
+(* ============================================================ *)
+
+expression    = assignment ;
+
+assignment    = logic_or [ "=" assignment ] ;
+
+logic_or      = logic_and { "||" logic_and } ;
+
+logic_and     = equality { "&&" equality } ;
+
+equality      = comparison { ( "==" | "!=" ) comparison } ;
+
+comparison    = send { ( "<" | "<=" | ">" | ">=" ) send } ;
+
+send          = term { "!" term } ;  (* Message send operator *)
+
+term          = factor { ( "+" | "-" ) factor } ;
+
+factor        = unary { ( "*" | "/" | "%" ) unary } ;
+
+unary         = ( "-" | "!" | "~" ) unary
+              | postfix
+              ;
+
+postfix       = primary { postfix_op } ;
+
+postfix_op    = "(" [ arg_list ] ")"   (* function call *)
+              | "[" expression "]"      (* index access *)
+              | "." IDENT               (* field access *)
+              ;
+
+primary       = IDENT
+              | INT_LIT
+              | FLOAT_LIT
+              | STRING_LIT
+              | CHAR_LIT
+              | "true"
+              | "false"
+              | "nil"
+              | "self"
+              | "(" expression ")"
+              ;
+
+arg_list      = expression { "," expression } ;
+
+(* ============================================================ *)
+(* Types                                                        *)
+(* ============================================================ *)
+
+type          = type_primary [ type_suffix ] ;
+
+type_primary  = IDENT                    (* Named type *)
+              | "fn" "(" [ type_list ] ")" [ "->" type ]  (* Function type *)
+              ;
+
+type_suffix   = "?"                      (* Optional type *)
+              | "[" [ expression ] "]"   (* Array type *)
+              ;
+
+type_list     = type { "," type } ;
+
+(* ============================================================ *)
+(* Lexical Elements (Terminals)                                 *)
+(* ============================================================ *)
+
+IDENT         = ( LETTER | "_" ) { LETTER | DIGIT | "_" } ;
+
+INT_LIT       = DECIMAL_LIT
+              | HEX_LIT
+              | BINARY_LIT
+              | OCTAL_LIT
+              ;
+
+DECIMAL_LIT   = DIGIT { DIGIT } ;
+HEX_LIT       = "0" ( "x" | "X" ) HEX_DIGIT { HEX_DIGIT } ;
+BINARY_LIT    = "0" ( "b" | "B" ) ( "0" | "1" ) { "0" | "1" } ;
+OCTAL_LIT     = "0" ( "o" | "O" ) OCTAL_DIGIT { OCTAL_DIGIT } ;
+
+FLOAT_LIT     = DIGIT { DIGIT } "." DIGIT { DIGIT } [ EXPONENT ]
+              | DIGIT { DIGIT } EXPONENT
+              ;
+
+EXPONENT      = ( "e" | "E" ) [ "+" | "-" ] DIGIT { DIGIT } ;
+
+STRING_LIT    = '"' { STRING_CHAR } '"' ;
+STRING_CHAR   = ? any character except '"' and '\' ?
+              | ESCAPE_SEQ
+              ;
+
+CHAR_LIT      = "'" ( CHAR_CHAR | ESCAPE_SEQ ) "'" ;
+CHAR_CHAR     = ? any character except '\'' and '\' ? ;
+
+ESCAPE_SEQ    = '\' ( "n" | "r" | "t" | '\' | '"' | "'" | "0" ) ;
+
+LETTER        = "a" | ... | "z" | "A" | ... | "Z" ;
+DIGIT         = "0" | ... | "9" ;
+HEX_DIGIT     = DIGIT | "a" | ... | "f" | "A" | ... | "F" ;
+OCTAL_DIGIT   = "0" | ... | "7" ;
+
+(* ============================================================ *)
+(* Keywords (Reserved)                                          *)
+(* ============================================================ *)
+
+(* 
+ * actor, break, const, continue, else, enum, false, fn, for,
+ * if, immut, let, loop, match, mut, nil, receive, return, self,
+ * shared, spawn, struct, true, type, unique, while
+ *)
+
+(* ============================================================ *)
+(* Comments                                                     *)
+(* ============================================================ *)
+
+LINE_COMMENT  = "//" { ? any character except newline ? } ;
+
+BLOCK_COMMENT = "/*" { ? any character or nested block comment ? } "*/" ;

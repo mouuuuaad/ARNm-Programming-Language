@@ -1,0 +1,14 @@
+actor Counter {
+    let val: i32;
+
+    fn init() {
+       self.val = 111;
+       print(self.val);
+       self.val = 222;
+       print(self.val);
+    }
+}
+
+fn main() {
+    spawn Counter.init();
+}

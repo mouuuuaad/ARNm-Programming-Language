@@ -1,0 +1,7 @@
+fn worker() {
+    let x = 1;
+}
+
+fn main() {
+    spawn worker();
+}

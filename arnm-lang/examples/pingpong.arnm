@@ -1,0 +1,19 @@
+fn worker() {
+    let parent = self;
+    parent ! 100;
+    receive {
+        msg => {
+            // Echo back constant
+            parent ! 200;
+        }
+    }
+}
+
+fn main() {
+    let pid = spawn(worker());
+    receive {
+        m => {
+            // Got start msg
+        }
+    }
+}

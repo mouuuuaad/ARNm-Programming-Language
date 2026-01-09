@@ -1,0 +1,26 @@
+
+actor Counter {
+    let val: i32;
+
+    fn init(start_val: i32) {
+       self.val = start_val;
+    }
+    
+    fn get() -> i32 {
+        return self.val;
+    }
+}
+
+fn main() {
+    /* Spawn actor with custom init method */
+    let c = spawn Counter.init(100);
+    
+    /* Verify state */
+    /* This requires 'c' to be of type 'Process<Counter>' (implied) or similar.
+       And field access on process is distinct from field access on self.
+       Currently we don't support field access on process handle. 
+       We only support sending messages.
+       
+       So we'll just check if it compiles for now. 
+    */
+}

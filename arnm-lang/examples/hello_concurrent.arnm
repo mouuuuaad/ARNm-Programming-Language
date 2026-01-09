@@ -1,0 +1,61 @@
+// ARNm Example: Concurrent Counter
+//
+// This example demonstrates ARNm's core concurrency features:
+// - Actor definitions
+// - Message sending with the ! operator
+// - Receive blocks for pattern matching
+// - Process spawning
+
+// A simple counter actor
+actor Counter {
+    fn new() -> Counter {
+        return self;
+    }
+
+    fn get_count() -> i32 {
+        return 0;
+    }
+}
+
+// Main entry point
+fn main() {
+    // Spawn a new counter process
+    let counter = spawn Counter.new();
+
+    // Define message symbols
+    let inc = 1;
+    let get_msg = 2;
+
+    // Send messages to the counter
+    counter ! inc;
+    counter ! inc;
+    counter ! get_msg;
+}
+
+// Demonstrates process isolation
+fn worker(id: i32) {
+    let mut local_state = 0;
+
+    while true {
+        receive {
+            work => {
+                local_state = local_state + 1;
+            }
+
+            stop => {
+                break;
+            }
+        }
+    }
+
+    return;
+}
+
+// Multiple concurrent workers
+fn spawn_workers(count: i32) {
+    let mut i = 0;
+    while i < count {
+        spawn worker(i);
+        i = i + 1;
+    }
+}

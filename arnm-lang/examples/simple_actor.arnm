@@ -1,0 +1,15 @@
+actor Counter {
+    fn init() {
+        let x = 0;
+    }
+
+    receive {
+        inc => {
+            // handle inc
+        }
+    }
+}
+
+fn main() {
+    let pid = spawn(Counter_init());
+}
