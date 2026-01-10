@@ -80,6 +80,7 @@ ArnmProcess* proc_create(void (*entry)(void*), void* arg, size_t stack_size, siz
         free(proc);
         return NULL;
     }
+    mailbox_set_owner(proc->mailbox, proc);
     
     /* Scheduling state */
     proc->next = NULL;

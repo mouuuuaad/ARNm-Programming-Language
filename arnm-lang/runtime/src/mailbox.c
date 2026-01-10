@@ -5,6 +5,7 @@
 #include "../include/mailbox.h"
 #include "../include/process.h"
 #include "../include/scheduler.h"
+#include "../include/arnm.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -49,7 +50,7 @@ void message_free(ArnmMessage* msg) {
  * Mailbox Implementation (Lock-Free MPSC)
  * ============================================================ */
 
-ArnmMailbox* mailbox_create(void) {
+ArnmMailbox* mailbox_create_ex(ArnmProcess* owner, size_t capacity) {
     ArnmMailbox* mbox = (ArnmMailbox*)malloc(sizeof(ArnmMailbox));
     if (!mbox) return NULL;
     
@@ -63,8 +64,20 @@ ArnmMailbox* mailbox_create(void) {
     atomic_init(&mbox->head, dummy);
     atomic_init(&mbox->tail, dummy);
     atomic_init(&mbox->count, 0);
+    mbox->capacity = capacity;
+    mbox->owner = owner;
     
     return mbox;
+}
+
+ArnmMailbox* mailbox_create(void) {
+    return mailbox_create_ex(NULL, 0);  /* No owner, unlimited capacity */
+}
+
+void mailbox_set_owner(ArnmMailbox* mbox, ArnmProcess* owner) {
+    if (mbox) {
+        mbox->owner = owner;
+    }
 }
 
 void mailbox_destroy(ArnmMailbox* mbox) {
@@ -83,8 +96,31 @@ void mailbox_destroy(ArnmMailbox* mbox) {
     free(mbox);
 }
 
-bool mailbox_send(ArnmMailbox* mbox, uint64_t tag, void* data, size_t size) {
+bool mailbox_send_ex(ArnmMailbox* mbox, uint64_t tag, void* data, size_t size, int overflow_policy) {
     if (!mbox) return false;
+    
+    /* Check capacity limit */
+    if (mbox->capacity > 0) {
+        size_t current_count = atomic_load(&mbox->count);
+        if (current_count >= mbox->capacity) {
+            switch (overflow_policy) {
+                case MAILBOX_OVERFLOW_BLOCK:
+                    /* Spin wait until space available */
+                    while (atomic_load(&mbox->count) >= mbox->capacity) {
+                        arnm_yield();
+                    }
+                    break;
+                case MAILBOX_OVERFLOW_DROP:
+                    return false;  /* Silently drop */
+                case MAILBOX_OVERFLOW_PANIC:
+                    fprintf(stderr, "[ARNM PANIC] Mailbox overflow: %zu messages (capacity %zu)\n",
+                            current_count, mbox->capacity);
+                    abort();
+                default:
+                    return false;
+            }
+        }
+    }
     
     ArnmMessage* msg = message_create(tag, data, size);
     if (!msg) return false;
@@ -95,9 +131,16 @@ bool mailbox_send(ArnmMailbox* mbox, uint64_t tag, void* data, size_t size) {
     
     atomic_fetch_add(&mbox->count, 1);
     
-    /* TODO: Wake up waiting process if any */
+    /* Wake up waiting process if any */
+    if (mbox->owner && mbox->owner->state == PROC_STATE_WAITING) {
+        sched_wake(mbox->owner);
+    }
     
     return true;
+}
+
+bool mailbox_send(ArnmMailbox* mbox, uint64_t tag, void* data, size_t size) {
+    return mailbox_send_ex(mbox, tag, data, size, MAILBOX_OVERFLOW_DROP);
 }
 
 ArnmMessage* mailbox_try_receive(ArnmMailbox* mbox) {

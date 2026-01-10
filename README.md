@@ -6,6 +6,10 @@
 ![Version](https://img.shields.io/badge/version-0.2.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-orange)
 
+ <p align="center">
+  <img src="ARNm_Logo.jpg" alt="ARNm Logo" width="300"/>
+</p>
+
 ## 🚀 Overview
 
 **ARNm** (pronounced "Arnum") is a modern, statically-typed compiled language designed from the ground up for scalable concurrency. Inspired by Erlang's actor model and C's raw performance, ARNm empowers developers to build fault-tolerant, distributed systems with ease.

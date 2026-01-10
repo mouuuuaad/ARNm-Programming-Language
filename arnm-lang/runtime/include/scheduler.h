@@ -27,6 +27,17 @@ typedef struct {
 } RunQueue;
 
 /* ============================================================
+ * Wait Queue (for parked processes)
+ * ============================================================ */
+
+typedef struct {
+    ArnmProcess*        head;
+    ArnmProcess*        tail;
+    atomic_size_t       count;
+    pthread_spinlock_t  lock;
+} WaitQueue;
+
+/* ============================================================
  * Worker Thread
  * ============================================================ */
 
@@ -49,8 +60,10 @@ typedef struct {
     ArnmWorker*         workers;        /* Worker array */
     uint32_t            num_workers;    /* Number of workers */
     RunQueue            global_queue;   /* Global run queue */
+    WaitQueue           wait_queue;     /* Parked processes waiting for messages */
     atomic_bool         shutdown;       /* Shutdown flag */
     atomic_size_t       active_procs;   /* Active process count */
+    atomic_size_t       waiting_procs;  /* Waiting (parked) process count */
 } Scheduler;
 
 /* ============================================================
@@ -83,5 +96,14 @@ ArnmWorker* sched_current_worker(void);
 
 /* Get global scheduler */
 Scheduler* sched_global(void);
+
+/* Park a process in wait queue (called when waiting for message) */
+void sched_park(ArnmProcess* proc);
+
+/* Wake a parked process (called when message sent) */
+void sched_wake(ArnmProcess* proc);
+
+/* Check for deadlock condition */
+bool sched_check_deadlock(void);
 
 #endif /* ARNM_SCHEDULER_H */

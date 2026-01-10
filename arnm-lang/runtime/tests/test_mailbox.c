@@ -67,11 +67,11 @@ int main(void) {
     assert(ret == 0);
     
     /* Spawn receiver first */
-    ArnmProcess* recv_proc = arnm_spawn(receiver, NULL);
+    ArnmProcess* recv_proc = arnm_spawn(receiver, NULL, 0);
     assert(recv_proc != NULL);
     
     /* Spawn sender with receiver as argument */
-    ArnmProcess* send_proc = arnm_spawn(sender, recv_proc);
+    ArnmProcess* send_proc = arnm_spawn(sender, recv_proc, 0);
     assert(send_proc != NULL);
     
     /* Run scheduler */

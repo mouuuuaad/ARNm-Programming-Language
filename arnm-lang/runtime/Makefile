@@ -11,7 +11,7 @@ BUILD_DIR := build
 TEST_DIR := tests
 
 C_SRCS := $(SRC_DIR)/runtime.c $(SRC_DIR)/process.c $(SRC_DIR)/scheduler.c \
-          $(SRC_DIR)/mailbox.c $(SRC_DIR)/memory.c
+          $(SRC_DIR)/mailbox.c $(SRC_DIR)/memory.c $(SRC_DIR)/sync.c
 
 UNAME_M := $(shell uname -m)
 ifeq ($(UNAME_M),x86_64)
@@ -59,6 +59,27 @@ test_mailbox: $(TEST_DIR)/test_mailbox.c $(LIBRARY)
 	$(CC) $(CFLAGS) -I$(INC_DIR) -o $(BUILD_DIR)/test_mailbox $< -L$(BUILD_DIR) -larnm $(LDFLAGS)
 	@echo "Running mailbox test..."
 	@$(BUILD_DIR)/test_mailbox
+
+# Stress tests
+.PHONY: test_stress test_stress_spawn test_stress_messages test_stress_contention
+
+test_stress: dirs $(LIBRARY) test_stress_spawn test_stress_messages test_stress_contention
+	@echo "All stress tests passed!"
+
+test_stress_spawn: $(TEST_DIR)/test_stress_spawn.c $(LIBRARY)
+	$(CC) $(CFLAGS) -I$(INC_DIR) -o $(BUILD_DIR)/test_stress_spawn $< -L$(BUILD_DIR) -larnm $(LDFLAGS)
+	@echo "Running stress spawn test..."
+	@$(BUILD_DIR)/test_stress_spawn
+
+test_stress_messages: $(TEST_DIR)/test_stress_messages.c $(LIBRARY)
+	$(CC) $(CFLAGS) -I$(INC_DIR) -o $(BUILD_DIR)/test_stress_messages $< -L$(BUILD_DIR) -larnm $(LDFLAGS)
+	@echo "Running stress messages test..."
+	@$(BUILD_DIR)/test_stress_messages
+
+test_stress_contention: $(TEST_DIR)/test_stress_contention.c $(LIBRARY)
+	$(CC) $(CFLAGS) -I$(INC_DIR) -o $(BUILD_DIR)/test_stress_contention $< -L$(BUILD_DIR) -larnm $(LDFLAGS)
+	@echo "Running stress contention test..."
+	@$(BUILD_DIR)/test_stress_contention
 
 clean:
 	rm -rf $(BUILD_DIR)

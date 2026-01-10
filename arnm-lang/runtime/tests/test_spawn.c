@@ -28,7 +28,7 @@ int main(void) {
     
     /* Spawn 5 processes */
     for (int i = 0; i < 5; i++) {
-        ArnmProcess* proc = arnm_spawn(worker, (void*)(intptr_t)i);
+        ArnmProcess* proc = arnm_spawn(worker, (void*)(intptr_t)i, 0);
         assert(proc != NULL);
         printf("  Spawned process %d\n", i);
     }

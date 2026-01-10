@@ -99,6 +99,86 @@ static size_t runqueue_count(RunQueue* rq) {
 }
 
 /* ============================================================
+ * Wait Queue Operations (for parked processes)
+ * ============================================================ */
+
+static void waitqueue_init(WaitQueue* wq) {
+    wq->head = NULL;
+    wq->tail = NULL;
+    atomic_init(&wq->count, 0);
+    pthread_spin_init(&wq->lock, PTHREAD_PROCESS_PRIVATE);
+}
+
+static void waitqueue_destroy(WaitQueue* wq) {
+    pthread_spin_destroy(&wq->lock);
+}
+
+static void waitqueue_push(WaitQueue* wq, ArnmProcess* proc) {
+    pthread_spin_lock(&wq->lock);
+    
+    proc->next = NULL;
+    if (wq->tail) {
+        wq->tail->next = proc;
+    } else {
+        wq->head = proc;
+    }
+    wq->tail = proc;
+    atomic_fetch_add(&wq->count, 1);
+    
+    pthread_spin_unlock(&wq->lock);
+}
+
+static ArnmProcess* waitqueue_pop(WaitQueue* wq) {
+    pthread_spin_lock(&wq->lock);
+    
+    ArnmProcess* proc = wq->head;
+    if (proc) {
+        wq->head = proc->next;
+        if (!wq->head) {
+            wq->tail = NULL;
+        }
+        proc->next = NULL;
+        atomic_fetch_sub(&wq->count, 1);
+    }
+    
+    pthread_spin_unlock(&wq->lock);
+    return proc;
+}
+
+static ArnmProcess* waitqueue_remove(WaitQueue* wq, ArnmProcess* target) {
+    pthread_spin_lock(&wq->lock);
+    
+    ArnmProcess* prev = NULL;
+    ArnmProcess* proc = wq->head;
+    
+    while (proc) {
+        if (proc == target) {
+            if (prev) {
+                prev->next = proc->next;
+            } else {
+                wq->head = proc->next;
+            }
+            if (wq->tail == proc) {
+                wq->tail = prev;
+            }
+            proc->next = NULL;
+            atomic_fetch_sub(&wq->count, 1);
+            pthread_spin_unlock(&wq->lock);
+            return proc;
+        }
+        prev = proc;
+        proc = proc->next;
+    }
+    
+    pthread_spin_unlock(&wq->lock);
+    return NULL;
+}
+
+static size_t waitqueue_count(WaitQueue* wq) {
+    return atomic_load(&wq->count);
+}
+
+/* ============================================================
  * Work Stealing
  * ============================================================ */
 
@@ -259,8 +339,10 @@ int sched_init(uint32_t num_workers) {
     g_scheduler.num_workers = num_workers;
     atomic_init(&g_scheduler.shutdown, false);
     atomic_init(&g_scheduler.active_procs, 0);
+    atomic_init(&g_scheduler.waiting_procs, 0);
     
     runqueue_init(&g_scheduler.global_queue);
+    waitqueue_init(&g_scheduler.wait_queue);
     
     for (uint32_t i = 0; i < num_workers; i++) {
         g_scheduler.workers[i].id = i;
@@ -302,10 +384,56 @@ void sched_shutdown(void) {
     
     /* Cleanup */
     runqueue_destroy(&g_scheduler.global_queue);
+    waitqueue_destroy(&g_scheduler.wait_queue);
     for (uint32_t i = 0; i < g_scheduler.num_workers; i++) {
         runqueue_destroy(&g_scheduler.workers[i].local_queue);
     }
     
     free(g_scheduler.workers);
     memset(&g_scheduler, 0, sizeof(g_scheduler));
+}
+
+/* ============================================================
+ * Process Parking/Waking
+ * ============================================================ */
+
+void sched_park(ArnmProcess* proc) {
+    if (!proc) return;
+    
+    /* Mark process as waiting */
+    proc->state = PROC_STATE_WAITING;
+    
+    /* Add to wait queue */
+    waitqueue_push(&g_scheduler.wait_queue, proc);
+    atomic_fetch_add(&g_scheduler.waiting_procs, 1);
+}
+
+void sched_wake(ArnmProcess* proc) {
+    if (!proc) return;
+    
+    /* Try to remove from wait queue */
+    ArnmProcess* found = waitqueue_remove(&g_scheduler.wait_queue, proc);
+    if (found) {
+        atomic_fetch_sub(&g_scheduler.waiting_procs, 1);
+        
+        /* Re-enqueue to run queue */
+        found->state = PROC_STATE_READY;
+        runqueue_push(&g_scheduler.global_queue, found);
+    }
+}
+
+bool sched_check_deadlock(void) {
+    size_t active = atomic_load(&g_scheduler.active_procs);
+    size_t waiting = atomic_load(&g_scheduler.waiting_procs);
+    
+    /* Deadlock: processes exist but all are waiting */
+    if (active > 0 && waiting == active) {
+        /* Check if all waiting processes have empty mailboxes */
+        /* For now, just return true - a full check requires mailbox inspection */
+        fprintf(stderr, "[ARNM WARNING] Potential deadlock detected: %zu processes all waiting\n", 
+                waiting);
+        return true;
+    }
+    
+    return false;
 }
