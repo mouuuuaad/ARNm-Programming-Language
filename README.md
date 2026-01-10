@@ -7,7 +7,7 @@
 ![License](https://img.shields.io/badge/license-MIT-orange)
 
  <p align="center">
-  <img src="ARNm_Logo.jpg" alt="ARNm Logo" width="300"/>
+  <img src="ARNm_Logo.jpg" alt="ARNm Logo" width="600" height="600"/>
 </p>
 
 ## 🚀 Overview
