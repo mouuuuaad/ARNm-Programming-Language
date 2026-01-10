@@ -550,5 +550,3 @@ fn main() {
 6. **Panic propagation** - Exit reasons and linked process notification
 
 ---
-
-*Created: 2026-01-09 (Day 5)*
