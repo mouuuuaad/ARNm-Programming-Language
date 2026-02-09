@@ -149,6 +149,7 @@ const char* token_kind_name(TokenKind kind) {
         [TOK_ARROW]        = "->",
         [TOK_FAT_ARROW]    = "=>",
         [TOK_DOUBLE_COLON] = "::",
+        [TOK_COLON_EQ]     = ":=",
         [TOK_EQ_EQ]        = "==",
         [TOK_BANG_EQ]      = "!=",
         [TOK_LT_EQ]        = "<=",
@@ -597,7 +598,10 @@ Token lexer_next_token(Lexer* lexer) {
             break;
             
         case ':':
-            if (peek_char(lexer) == ':') {
+            if (peek_char(lexer) == '=') {
+                advance(lexer);
+                lexer->current = make_token(lexer, TOK_COLON_EQ, start, start_line, start_col);
+            } else if (peek_char(lexer) == ':') {
                 advance(lexer);
                 lexer->current = make_token(lexer, TOK_DOUBLE_COLON, start, start_line, start_col);
             } else {

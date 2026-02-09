@@ -124,6 +124,31 @@ TEST(let_statement) {
     ast_arena_destroy(&arena);
 }
 
+TEST(const_and_short_decl) {
+    const char* src = "fn main() { const answer = 42; total := answer + 1; }";
+    AstArena arena;
+    Parser parser;
+    AstProgram* prog = parse_source(src, &arena, &parser);
+
+    ASSERT(parser_success(&parser));
+    ASSERT_EQ(prog->decl_count, 1);
+
+    AstBlock* body = prog->decls[0]->as.fn_decl.body;
+    ASSERT_EQ(body->stmt_count, 2);
+
+    AstStmt* s1 = body->stmts[0];
+    ASSERT_EQ(s1->kind, AST_LET_STMT);
+    ASSERT_EQ(s1->as.let_stmt.is_mut, false);
+    ASSERT(s1->as.let_stmt.init != NULL);
+
+    AstStmt* s2 = body->stmts[1];
+    ASSERT_EQ(s2->kind, AST_LET_STMT);
+    ASSERT_EQ(s2->as.let_stmt.is_mut, false);
+    ASSERT(s2->as.let_stmt.init != NULL);
+
+    ast_arena_destroy(&arena);
+}
+
 TEST(if_statement) {
     const char* src = "fn main() { if x { } else { } }";
     AstArena arena;

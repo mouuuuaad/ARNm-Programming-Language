@@ -32,13 +32,14 @@ static int tests_passed = 0;
  * ============================================================ */
 
 TEST(keywords) {
-    const char* src = "fn actor let mut spawn receive if else while return";
+    const char* src = "fn actor let const mut spawn receive if else while return";
     Lexer lexer;
     lexer_init(&lexer, src, strlen(src));
     
     ASSERT_EQ(lexer_next_token(&lexer).kind, TOK_FN);
     ASSERT_EQ(lexer_next_token(&lexer).kind, TOK_ACTOR);
     ASSERT_EQ(lexer_next_token(&lexer).kind, TOK_LET);
+    ASSERT_EQ(lexer_next_token(&lexer).kind, TOK_CONST);
     ASSERT_EQ(lexer_next_token(&lexer).kind, TOK_MUT);
     ASSERT_EQ(lexer_next_token(&lexer).kind, TOK_SPAWN);
     ASSERT_EQ(lexer_next_token(&lexer).kind, TOK_RECEIVE);
@@ -50,7 +51,7 @@ TEST(keywords) {
 }
 
 TEST(operators) {
-    const char* src = "+-*/% == != < <= > >= && || -> => ! ::";
+    const char* src = "+-*/% == != < <= > >= && || -> => ! :: :=";
     Lexer lexer;
     lexer_init(&lexer, src, strlen(src));
     
@@ -71,6 +72,7 @@ TEST(operators) {
     ASSERT_EQ(lexer_next_token(&lexer).kind, TOK_FAT_ARROW);
     ASSERT_EQ(lexer_next_token(&lexer).kind, TOK_BANG);
     ASSERT_EQ(lexer_next_token(&lexer).kind, TOK_DOUBLE_COLON);
+    ASSERT_EQ(lexer_next_token(&lexer).kind, TOK_COLON_EQ);
     ASSERT_EQ(lexer_next_token(&lexer).kind, TOK_EOF);
 }
 

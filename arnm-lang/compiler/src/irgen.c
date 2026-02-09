@@ -266,7 +266,15 @@ static IrValue gen_expr(GenContext* ctx, AstExpr* expr) {
                 } else if (lhs->kind == AST_FIELD_EXPR) {
                     /* Handle self.field = val OR struct.field = val */
                     IrValue obj_val = gen_expr(ctx, lhs->as.field.object);
-                    Type* obj_type = lhs->as.field.object->common.sema_type;
+                    Type* obj_type = NULL;
+                    /* Get sema_type from the object expression based on its kind */
+                    if (lhs->as.field.object->kind == AST_SELF_EXPR) {
+                        obj_type = ctx->cur_actor_type;
+                    } else if (lhs->as.field.object->kind == AST_IDENT_EXPR) {
+                        obj_type = lhs->as.field.object->as.ident.common.sema_type;
+                    } else if (lhs->as.field.object->kind == AST_FIELD_EXPR) {
+                        obj_type = lhs->as.field.object->as.field.common.sema_type;
+                    }
                     /* Fallback for self if sema_type missing? */
                     if (!obj_type && lhs->as.field.object->kind == AST_SELF_EXPR) obj_type = ctx->cur_actor_type;
                     
@@ -319,13 +327,28 @@ static IrValue gen_expr(GenContext* ctx, AstExpr* expr) {
         }
         case AST_INT_LIT_EXPR: return ir_val_const_i32(expr->as.int_lit.value);
         case AST_BOOL_LIT_EXPR: return ir_val_const_bool(expr->as.bool_lit.value);
+        case AST_STRING_LIT_EXPR: {
+            /* Create a constant value with string pointer stored in constant.as.i */
+            IrValue v;
+            v.kind = VAL_CONST;
+            v.type.kind = IR_PTR;  /* Mark as pointer (string) */
+            /* Store string pointer as uint64_t - interpreter will extract it */
+            v.storage.constant.as.i = (uint64_t)(uintptr_t)expr->as.string_lit.value;
+            return v;
+        }
         case AST_IDENT_EXPR: return gen_identifier(ctx, &expr->as.ident);
         case AST_CALL_EXPR: return gen_call(ctx, &expr->as.call);
         case AST_FIELD_EXPR: {
             IrValue obj = gen_expr(ctx, expr->as.field.object);
-            Type* obj_type = expr->as.field.object->common.sema_type;
-            /* Fallback for self */
-            if (!obj_type && expr->as.field.object->kind == AST_SELF_EXPR) obj_type = ctx->cur_actor_type;
+            Type* obj_type = NULL;
+            /* Get sema_type from the object expression based on its kind */
+            if (expr->as.field.object->kind == AST_SELF_EXPR) {
+                obj_type = ctx->cur_actor_type;
+            } else if (expr->as.field.object->kind == AST_IDENT_EXPR) {
+                obj_type = expr->as.field.object->as.ident.common.sema_type;
+            } else if (expr->as.field.object->kind == AST_FIELD_EXPR) {
+                obj_type = expr->as.field.object->as.field.common.sema_type;
+            }
             
             if (obj_type) {
                 obj_type = type_resolve(obj_type);
@@ -374,37 +397,7 @@ static IrValue gen_expr(GenContext* ctx, AstExpr* expr) {
             }
             return (IrValue){ .kind = VAL_UNDEF };
         }
-                     if (actor->fields[i].name_len == len &&
-                         strncmp(actor->fields[i].name, name, len) == 0) {
-                         index = (int)i;
-                         break;
-                     }
-                 }
-                 
-                 if (index >= 0) {
-                     /* Emit field ptr */
-                     /* obj is Process*. Load actor_state from offset 0 (first field). */
-                     IrInstr* state_load = ir_build_load(ctx->cur_fn, ctx->cur_block, ir_type_ptr(), obj);
 
-                     IrInstr* fptr = ir_build_field_ptr(ctx->cur_fn, ctx->cur_block, state_load->result, index);
-                     
-                     /* Emit load */
-                     /* For now assume i32. */
-                     IrType ir_ftype = ir_type_i32(); // TODO: mapping
-                     
-                     IrInstr* load = ir_build_load(ctx->cur_fn, ctx->cur_block, ir_ftype, fptr->result);
-                     return load->result;
-                 } else {
-                     fprintf(stderr, "Debug: Field '%.*s' NOT FOUND in actor. fields_count=%zu\n", len, name, actor->field_count);
-                 }
-            } else {
-                 /* 
-                 if (!ctx->cur_actor_type) fprintf(stderr, "Debug: cur_actor_type is NULL in field expr\n");
-                 if (expr->as.field.object->kind != AST_SELF_EXPR) fprintf(stderr, "Debug: object not self in field expr\n");
-                 */
-            }
-            return (IrValue){ .kind = VAL_UNDEF };
-        }
         case AST_SEND_EXPR: return gen_send(ctx, &expr->as.send);
         case AST_SPAWN_EXPR: {
             AstExpr* target = expr->as.spawn_expr.expr;

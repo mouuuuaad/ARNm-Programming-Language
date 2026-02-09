@@ -1,0 +1,50 @@
+# ARNm WebAssembly Build
+# Compiles ARNm compiler to WASM for browser-based playground
+
+EMSDK_ENV := emsdk/emsdk_env.sh
+EMCC := emcc
+
+# Compiler source files (excluding x86-specific codegen)
+COMPILER_SRCS := compiler/src/lexer.c \
+                 compiler/src/parser.c \
+                 compiler/src/types.c \
+                 compiler/src/symbol.c \
+                 compiler/src/sema.c \
+                 compiler/src/ir.c \
+                 compiler/src/irgen.c
+
+# Include directories
+INC_DIRS := -I compiler/include -I runtime/include
+
+# Output directory
+WASM_DIR := docs-site/wasm
+
+# Emscripten flags
+EMCC_FLAGS := -O2 \
+              -s WASM=1 \
+              -s MODULARIZE=1 \
+              -s EXPORT_NAME="ArnmModule" \
+              -s EXPORTED_FUNCTIONS='["_arnm_compile_string","_arnm_get_output","_arnm_free_output","_malloc","_free"]' \
+              -s EXPORTED_RUNTIME_METHODS='["ccall","cwrap","UTF8ToString","stringToUTF8","lengthBytesUTF8"]' \
+              -s ALLOW_MEMORY_GROWTH=1 \
+              -s INITIAL_MEMORY=16MB \
+              -s STACK_SIZE=1MB \
+              -s NO_EXIT_RUNTIME=1
+
+.PHONY: all clean dirs
+
+all: dirs $(WASM_DIR)/arnm.js
+
+dirs:
+	@mkdir -p $(WASM_DIR)
+
+# Compile to WASM with the interpreter wrapper
+$(WASM_DIR)/arnm.js: $(COMPILER_SRCS) wasm/arnm_wasm_api.c
+	@echo "Compiling ARNm to WebAssembly..."
+	@source $(EMSDK_ENV) && $(EMCC) $(EMCC_FLAGS) $(INC_DIRS) \
+		$(COMPILER_SRCS) wasm/arnm_wasm_api.c \
+		-o $@
+	@echo "WASM build complete: $(WASM_DIR)/arnm.js and $(WASM_DIR)/arnm.wasm"
+
+clean:
+	rm -rf $(WASM_DIR)/*.js $(WASM_DIR)/*.wasm

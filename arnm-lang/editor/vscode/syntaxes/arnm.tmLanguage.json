@@ -1,0 +1,124 @@
+{
+  "name": "ARNm",
+  "scopeName": "source.arnm",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#functions" },
+    { "include": "#actors" },
+    { "include": "#structs" },
+    { "include": "#keywords" },
+    { "include": "#constants" },
+    { "include": "#types" },
+    { "include": "#operators" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.arnm",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.arnm",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.arnm",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [
+            { "name": "constant.character.escape.arnm", "match": "\\\\[nrt\\\\\"'0]" }
+          ]
+        },
+        {
+          "name": "string.quoted.single.arnm",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            { "name": "constant.character.escape.arnm", "match": "\\\\[nrt\\\\\"'0]" }
+          ]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.arnm",
+          "match": "\\b(0x[0-9a-fA-F]+|0b[01]+|0o[0-7]+|\\d+(\\.\\d+)?([eE][+-]?\\d+)?)\\b"
+        }
+      ]
+    },
+    "functions": {
+      "patterns": [
+        {
+          "name": "meta.function.arnm",
+          "match": "\\bfn\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "entity.name.function.arnm" }
+          }
+        }
+      ]
+    },
+    "actors": {
+      "patterns": [
+        {
+          "name": "meta.actor.arnm",
+          "match": "\\bactor\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "entity.name.type.actor.arnm" }
+          }
+        }
+      ]
+    },
+    "structs": {
+      "patterns": [
+        {
+          "name": "meta.struct.arnm",
+          "match": "\\bstruct\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "entity.name.type.struct.arnm" }
+          }
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.arnm",
+          "match": "\\b(actor|fn|let|const|mut|if|else|while|for|loop|break|continue|return|spawn|receive|match|enum|type|unique|shared|immut)\\b"
+        }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        {
+          "name": "constant.language.arnm",
+          "match": "\\b(true|false|nil|self)\\b"
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.arnm",
+          "match": "\\b(i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|bool|String|str|Process)\\b"
+        }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.arnm",
+          "match": "(\\+|\\-|\\*|/|%|==|!=|<=|>=|&&|\\|\\||=|:=|->|=>|!|::|\\.|\\?|\\^|\\~)"
+        }
+      ]
+    }
+  }
+}

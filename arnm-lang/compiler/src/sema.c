@@ -28,6 +28,19 @@ void sema_init(SemaContext* ctx) {
     ctx->current_fn_return = NULL;
     ctx->in_loop = false;
     ctx->in_actor = false;
+    
+    /* Register built-in functions */
+    /* print(any) -> void - uses type variable to accept any type */
+    Type** print_params = type_arena_alloc(&ctx->type_arena, sizeof(Type*));
+    print_params[0] = type_var(&ctx->type_arena);  /* Accept any type */
+    Type* print_type = type_fn(&ctx->type_arena, print_params, 1, type_unit(&ctx->type_arena));
+    symbol_define(&ctx->symbols, "print", 5, SYMBOL_FN, print_type, (Span){0});
+    
+    /* println(any) -> void */
+    Type** println_params = type_arena_alloc(&ctx->type_arena, sizeof(Type*));
+    println_params[0] = type_var(&ctx->type_arena);  /* Accept any type */
+    Type* println_type = type_fn(&ctx->type_arena, println_params, 1, type_unit(&ctx->type_arena));
+    symbol_define(&ctx->symbols, "println", 7, SYMBOL_FN, println_type, (Span){0});
 }
 
 void sema_destroy(SemaContext* ctx) {
@@ -291,11 +304,23 @@ static Type* infer_call(SemaContext* ctx, AstCallExpr* call) {
         return callee_type->as.fn.return_type;
     }
     
-    /* Unify arguments with parameters */
+    /* Check if this is a built-in variadic function (print/println) */
+    bool is_print_builtin = false;
+    if (call->callee->kind == AST_IDENT_EXPR) {
+        AstIdentExpr* ident = &call->callee->as.ident;
+        if ((ident->name_len == 5 && memcmp(ident->name, "print", 5) == 0) ||
+            (ident->name_len == 7 && memcmp(ident->name, "println", 7) == 0)) {
+            is_print_builtin = true;
+        }
+    }
+    
+    /* Unify arguments with parameters (skip for print builtins) */
     for (size_t i = 0; i < call->arg_count; i++) {
         Type* arg_type = sema_infer_expr(ctx, call->args[i]);
-        if (!type_unify(arg_type, callee_type->as.fn.param_types[i])) {
-            sema_error(ctx, call->common.span, "argument type mismatch");
+        if (!is_print_builtin) {
+            if (!type_unify(arg_type, callee_type->as.fn.param_types[i])) {
+                sema_error(ctx, call->common.span, "argument type mismatch");
+            }
         }
     }
     
@@ -329,9 +354,19 @@ static Type* infer_spawn(SemaContext* ctx, AstSpawnExpr* spawn) {
 Type* sema_infer_expr(SemaContext* ctx, AstExpr* expr) {
     if (!expr) return type_error(&ctx->type_arena);
     
-    /* Return cached type if already inferred? No, re-inference might be needed for generics? 
-       For now, simple caching or overwrite. */
-    if (expr->common.sema_type) return expr->common.sema_type;
+    /* Return cached type if already inferred - use first variant's common to check */
+    Type* cached = NULL;
+    switch (expr->kind) {
+        case AST_IDENT_EXPR:      cached = expr->as.ident.common.sema_type; break;
+        case AST_INT_LIT_EXPR:    cached = expr->as.int_lit.common.sema_type; break;
+        case AST_BINARY_EXPR:     cached = expr->as.binary.common.sema_type; break;
+        case AST_UNARY_EXPR:      cached = expr->as.unary.common.sema_type; break;
+        case AST_CALL_EXPR:       cached = expr->as.call.common.sema_type; break;
+        case AST_FIELD_EXPR:      cached = expr->as.field.common.sema_type; break;
+        case AST_SPAWN_EXPR:      cached = expr->as.spawn_expr.common.sema_type; break;
+        default: break;
+    }
+    if (cached) return cached;
     
     Type* result = NULL;
     
@@ -478,9 +513,23 @@ Type* sema_infer_expr(SemaContext* ctx, AstExpr* expr) {
     }
     
     /* Store resolved type in AST */
-    /* (Would need to add type field to expressions) */
-    
-    if (result) expr->common.sema_type = result;
+    if (result) {
+        switch (expr->kind) {
+            case AST_IDENT_EXPR:      expr->as.ident.common.sema_type = result; break;
+            case AST_INT_LIT_EXPR:    expr->as.int_lit.common.sema_type = result; break;
+            case AST_FLOAT_LIT_EXPR:  expr->as.float_lit.common.sema_type = result; break;
+            case AST_STRING_LIT_EXPR: expr->as.string_lit.common.sema_type = result; break;
+            case AST_BOOL_LIT_EXPR:   expr->as.bool_lit.common.sema_type = result; break;
+            case AST_BINARY_EXPR:     expr->as.binary.common.sema_type = result; break;
+            case AST_UNARY_EXPR:      expr->as.unary.common.sema_type = result; break;
+            case AST_CALL_EXPR:       expr->as.call.common.sema_type = result; break;
+            case AST_FIELD_EXPR:      expr->as.field.common.sema_type = result; break;
+            case AST_SPAWN_EXPR:      expr->as.spawn_expr.common.sema_type = result; break;
+            case AST_SEND_EXPR:       expr->as.send.common.sema_type = result; break;
+            case AST_GROUP_EXPR:      expr->as.group.common.sema_type = result; break;
+            default: break;
+        }
+    }
     return result;
 }
 

@@ -1,0 +1,81 @@
+{
+  "name": "ARNm Forge Dark",
+  "type": "dark",
+  "colors": {
+    "editor.background": "#0f1115",
+    "editor.foreground": "#e6e9ef",
+    "editorLineNumber.foreground": "#4b5563",
+    "editorLineNumber.activeForeground": "#e6e9ef",
+    "editorCursor.foreground": "#ef5350",
+    "editor.selectionBackground": "#3a1d1f",
+    "editor.selectionHighlightBackground": "#2a1a1c",
+    "editorIndentGuide.background": "#1f2430",
+    "editorIndentGuide.activeBackground": "#2a2f3a",
+    "editorWhitespace.foreground": "#2a2f3a",
+    "editorRuler.foreground": "#1f2430",
+    "sideBar.background": "#11151d",
+    "sideBar.foreground": "#cbd3df",
+    "activityBar.background": "#141922",
+    "activityBar.foreground": "#e6e9ef",
+    "statusBar.background": "#141922",
+    "statusBar.foreground": "#cbd3df",
+    "titleBar.activeBackground": "#141922",
+    "titleBar.activeForeground": "#e6e9ef",
+    "panel.background": "#0f1115",
+    "terminal.background": "#0f1115",
+    "terminal.foreground": "#e6e9ef"
+  },
+  "tokenColors": [
+    {
+      "name": "Comments",
+      "scope": ["comment"],
+      "settings": {
+        "foreground": "#6b7280",
+        "fontStyle": "italic"
+      }
+    },
+    {
+      "name": "Strings",
+      "scope": ["string"],
+      "settings": {
+        "foreground": "#8ad0b3"
+      }
+    },
+    {
+      "name": "Numbers",
+      "scope": ["constant.numeric"],
+      "settings": {
+        "foreground": "#f6c177"
+      }
+    },
+    {
+      "name": "Keywords",
+      "scope": ["keyword.control", "keyword.operator"],
+      "settings": {
+        "foreground": "#ef5350",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Functions",
+      "scope": ["entity.name.function"],
+      "settings": {
+        "foreground": "#ffd166"
+      }
+    },
+    {
+      "name": "Types",
+      "scope": ["storage.type"],
+      "settings": {
+        "foreground": "#4dd0e1"
+      }
+    },
+    {
+      "name": "Constants",
+      "scope": ["constant.language"],
+      "settings": {
+        "foreground": "#ff8a65"
+      }
+    }
+  ]
+}

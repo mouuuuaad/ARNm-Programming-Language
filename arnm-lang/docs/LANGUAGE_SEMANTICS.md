@@ -98,6 +98,26 @@ actor Counter {
 
 **Rationale**: Explicit `self` prevents confusion between local variables and fields, and makes mutation visible.
 
+### 2.5 Bindings and Mutability
+
+ARNm uses immutable bindings by default. Mutation is explicit and opt-in.
+
+| Form | Meaning | Notes |
+|------|---------|-------|
+| `let x = expr;` | Immutable local binding | May omit initializer (uninitialized) |
+| `let mut x = expr;` | Mutable local binding | `x = ...` allowed |
+| `const X = expr;` | Immutable constant binding | Requires initializer; `mut` is illegal |
+| `x := expr;` | Short declaration | Sugar for `let x = expr;` (no type annotation) |
+
+Examples:
+
+```arnm
+let name = "arnm";
+let mut count = 0;
+const answer: i32 = 42;
+total := answer + 1;
+```
+
 ---
 
 ## 3. Evaluation Order

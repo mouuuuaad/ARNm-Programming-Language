@@ -88,6 +88,7 @@ typedef enum {
     TOK_ARROW,          /* -> */
     TOK_FAT_ARROW,      /* => */
     TOK_DOUBLE_COLON,   /* :: */
+    TOK_COLON_EQ,       /* := */
     TOK_EQ_EQ,          /* == */
     TOK_BANG_EQ,        /* != */
     TOK_LT_EQ,          /* <= */

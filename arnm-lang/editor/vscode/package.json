@@ -1,0 +1,53 @@
+{
+  "name": "arnm-language-tools",
+  "displayName": "ARNm Language Tools",
+  "description": "Syntax highlighting, snippets, completions, and themes for ARNm.",
+  "version": "0.1.0",
+  "publisher": "arnm",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Themes"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onLanguage:arnm"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "arnm",
+        "aliases": ["ARNm", "arnm"],
+        "extensions": [".arnm"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "arnm",
+        "scopeName": "source.arnm",
+        "path": "./syntaxes/arnm.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "arnm",
+        "path": "./snippets/arnm.json"
+      }
+    ],
+    "themes": [
+      {
+        "label": "ARNm Forge Dark",
+        "uiTheme": "vs-dark",
+        "path": "./themes/arnm-forge-dark.json"
+      },
+      {
+        "label": "ARNm Forge Light",
+        "uiTheme": "vs",
+        "path": "./themes/arnm-forge-light.json"
+      }
+    ]
+  }
+}

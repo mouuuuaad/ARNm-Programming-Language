@@ -52,6 +52,14 @@ static bool check(Parser* parser, TokenKind kind) {
     return parser->current.kind == kind;
 }
 
+static bool check_next(Parser* parser, TokenKind kind) {
+    if (parser->current.kind == TOK_EOF) {
+        return false;
+    }
+    Token next = lexer_peek_token(parser->lexer);
+    return next.kind == kind;
+}
+
 static bool match(Parser* parser, TokenKind kind) {
     if (!check(parser, kind)) return false;
     advance(parser);
@@ -97,6 +105,7 @@ static void synchronize(Parser* parser) {
             case TOK_FN:
             case TOK_ACTOR:
             case TOK_LET:
+            case TOK_CONST:
             case TOK_IF:
             case TOK_WHILE:
             case TOK_FOR:
@@ -512,6 +521,67 @@ static AstStmt* parse_let_stmt(Parser* parser) {
     return stmt;
 }
 
+static AstStmt* parse_const_stmt(Parser* parser) {
+    Span start = parser->previous.span;
+    if (match(parser, TOK_MUT)) {
+        error(parser, "const bindings cannot be mutable");
+    }
+
+    consume(parser, TOK_IDENT, "expected variable name after 'const'");
+    const char* name = parser->previous.lexeme;
+    uint32_t name_len = parser->previous.length;
+
+    AstType* type_ann = NULL;
+    if (match(parser, TOK_COLON)) {
+        type_ann = parse_type(parser);
+    }
+
+    AstExpr* init = NULL;
+    if (match(parser, TOK_EQ)) {
+        init = parse_expression(parser);
+    } else {
+        error(parser, "const binding requires an initializer");
+    }
+
+    consume(parser, TOK_SEMI, "expected ';' after const declaration");
+
+    AstStmt* stmt = AST_NEW(parser->arena, AstStmt);
+    if (!stmt) return NULL;
+
+    stmt->kind = AST_LET_STMT;
+    stmt->as.let_stmt.common.span = start;
+    stmt->as.let_stmt.name = name;
+    stmt->as.let_stmt.name_len = name_len;
+    stmt->as.let_stmt.is_mut = false;
+    stmt->as.let_stmt.type_ann = type_ann;
+    stmt->as.let_stmt.init = init;
+    return stmt;
+}
+
+static AstStmt* parse_short_let_stmt(Parser* parser) {
+    Span start = parser->current.span;
+
+    consume(parser, TOK_IDENT, "expected variable name");
+    const char* name = parser->previous.lexeme;
+    uint32_t name_len = parser->previous.length;
+
+    consume(parser, TOK_COLON_EQ, "expected ':=' after identifier");
+    AstExpr* init = parse_expression(parser);
+    consume(parser, TOK_SEMI, "expected ';' after short declaration");
+
+    AstStmt* stmt = AST_NEW(parser->arena, AstStmt);
+    if (!stmt) return NULL;
+
+    stmt->kind = AST_LET_STMT;
+    stmt->as.let_stmt.common.span = start;
+    stmt->as.let_stmt.name = name;
+    stmt->as.let_stmt.name_len = name_len;
+    stmt->as.let_stmt.is_mut = false;
+    stmt->as.let_stmt.type_ann = NULL;
+    stmt->as.let_stmt.init = init;
+    return stmt;
+}
+
 static AstStmt* parse_return_stmt(Parser* parser) {
     Span start = parser->previous.span;
     
@@ -683,6 +753,7 @@ static AstStmt* parse_receive_stmt(Parser* parser) {
 
 AstStmt* parse_statement(Parser* parser) {
     if (match(parser, TOK_LET))     return parse_let_stmt(parser);
+    if (match(parser, TOK_CONST))   return parse_const_stmt(parser);
     if (match(parser, TOK_RETURN))  return parse_return_stmt(parser);
     if (match(parser, TOK_IF))      return parse_if_stmt(parser);
     if (match(parser, TOK_WHILE))   return parse_while_stmt(parser);
@@ -703,6 +774,10 @@ AstStmt* parse_statement(Parser* parser) {
         AstStmt* stmt = AST_NEW(parser->arena, AstStmt);
         if (stmt) stmt->kind = AST_CONTINUE_STMT;
         return stmt;
+    }
+
+    if (check(parser, TOK_IDENT) && check_next(parser, TOK_COLON_EQ)) {
+        return parse_short_let_stmt(parser);
     }
     
     /* Expression statement */

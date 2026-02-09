@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="ARNm Programming Language Documentation - Actor-based concurrent programming">
+    <title>ARNm Documentation</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="container">
+        <!-- Sidebar -->
+        <nav class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <a href="#" class="logo-container">
+                    <img src="logo.jpg" alt="ARNm Logo" class="logo-img">
+                    <h2>ARNm</h2>
+                </a>
+                <span class="version">v0.2.0</span>
+            </div>
+            <div class="search-box">
+                <input type="text" id="search" placeholder="Search docs..." aria-label="Search documentation">
+            </div>
+            <ul class="toc" id="toc">
+                <!-- Dynamically populated -->
+            </ul>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content" id="main-content">
+            <header class="breadcrumb">
+                <span class="brand">ARNm</span> : <span id="current-section">Introduction</span>
+                <div class="header-actions">
+                    <button class="icon-btn" id="focus-toggle" title="Focus Mode" aria-label="Toggle Focus Mode">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                            <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+                        </svg>
+                    </button>
+                    <button class="icon-btn" id="theme-toggle" title="Toggle Theme" aria-label="Toggle Dark Mode">
+                        <!-- Moon icon (default for light mode) -->
+                        <svg id="theme-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                            <path
+                                d="M9.37,5.51C9.19,6.15,9.1,6.82,9.1,7.5c0,4.08,3.32,7.4,7.4,7.4c0.68,0,1.35-0.09,1.99-0.27C17.45,18.5,14.59,21,11,21c-5.52,0-10-4.48-10-10C1,7.41,3.5,4.55,6.51,2.49c-0.18,0.64-0.27,1.31-0.27,1.99c0,4.08,3.32,7.4,7.4,7.4c0.68,0,1.35-0.09,1.99-0.27 C17.45,18.5,14.59,21,11,21c-5.52,0-10-4.48-10-10C1,7.41,3.5,4.55,6.51,2.49z" />
+                        </svg>
+                    </button>
+                </div>
+            </header>
+            <div class="content-wrapper">
+                <div class="main-column">
+                    <article id="doc-content">
+                        <!-- Dynamically populated -->
+                    </article>
+
+                    <!-- Next/Prev Navigation -->
+                    <nav class="doc-pagination" id="doc-pagination">
+                        <a href="#" class="nav-prev" id="nav-prev">
+                            <span class="nav-label">Previous</span>
+                            <span class="nav-title">Previous Page</span>
+                        </a>
+                        <a href="#" class="nav-next" id="nav-next">
+                            <span class="nav-label">Next</span>
+                            <span class="nav-title">Next Page</span>
+                        </a>
+                    </nav>
+                </div>
+                <!-- On This Page Navigation -->
+                <aside class="on-this-page" id="on-this-page">
+                    <h3>ON THIS PAGE</h3>
+                    <div class="page-toc-wrapper">
+                        <div class="scroll-progress-track">
+                            <div class="scroll-progress-bar" id="scroll-progress-bar"></div>
+                        </div>
+                        <ul id="page-toc">
+                            <!-- Dynamically populated -->
+                        </ul>
+                    </div>
+                </aside>
+            </div>
+            <footer class="doc-footer">
+                <span>ARNm v0.2.0 Documentation</span>
+                <a href="https://github.com/mouuuuaad/ARNm-Programming-Language" target="_blank">Edit on GitHub</a>
+            </footer>
+        </main>
+    </div>
+
+    <!-- Content Loader -->
+    <script src="content/loader.js"></script>
+    <!-- Documentation Sections -->
+    <script src="content/01-introduction.js"></script>
+    <script src="content/02-getting-started.js"></script>
+    <script src="content/03-variables.js"></script>
+    <script src="content/04-data-types.js"></script>
+    <script src="content/05-operators.js"></script>
+    <script src="content/06-functions.js"></script>
+    <script src="content/07-control-flow.js"></script>
+    <script src="content/08-actors.js"></script>
+    <script src="content/09-structs.js"></script>
+    <script src="content/10-patterns.js"></script>
+    <script src="content/11-types.js"></script>
+    <script src="content/12-errors.js"></script>
+    <script src="content/13-runtime.js"></script>
+    <script src="content/14-compilation.js"></script>
+    <script src="content/15-reference.js"></script>
+    <script src="content/16-playground.js"></script>
+    <script src="content/17-flows.js"></script>
+    <!-- ARNm WASM Runtime -->
+    <script src="wasm/arnm.js"></script>
+    <script src="wasm/arnm-loader.js"></script>
+    <!-- ARNm Local Interpreter (for file:// mode) -->
+    <script src="arnm-interpreter.js"></script>
+    <!-- Application Logic -->
+    <script src="app.js"></script>
+</body>
+
+</html>

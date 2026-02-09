@@ -58,6 +58,8 @@ field         = IDENT ":" type ;
 block         = "{" { statement } "}" ;
 
 statement     = let_stmt
+              | const_stmt
+              | short_decl
               | return_stmt
               | if_stmt
               | while_stmt
@@ -71,6 +73,8 @@ statement     = let_stmt
               ;
 
 let_stmt      = "let" [ "mut" ] IDENT [ ":" type ] [ "=" expression ] ";" ;
+const_stmt    = "const" IDENT [ ":" type ] "=" expression ";" ;
+short_decl    = IDENT ":=" expression ";" ;
 
 return_stmt   = "return" [ expression ] ";" ;
 
