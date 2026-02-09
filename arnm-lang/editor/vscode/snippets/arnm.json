@@ -1,0 +1,66 @@
+{
+  "Main Function": {
+    "prefix": "main",
+    "body": [
+      "fn main() {",
+      "    $0",
+      "}"
+    ],
+    "description": "Main entry point"
+  },
+  "Function": {
+    "prefix": "fn",
+    "body": [
+      "fn ${1:name}(${2:params}) {",
+      "    $0",
+      "}"
+    ],
+    "description": "Function declaration"
+  },
+  "Actor": {
+    "prefix": "actor",
+    "body": [
+      "actor ${1:Name} {",
+      "    fn init() {",
+      "        $0",
+      "    }",
+      "}"
+    ],
+    "description": "Actor declaration"
+  },
+  "Struct": {
+    "prefix": "struct",
+    "body": [
+      "struct ${1:Name} {",
+      "    ${2:field}: ${3:i32}",
+      "}"
+    ],
+    "description": "Struct declaration"
+  },
+  "Receive": {
+    "prefix": "receive",
+    "body": [
+      "receive {",
+      "    ${1:msg} => {",
+      "        $0",
+      "    }",
+      "}"
+    ],
+    "description": "Receive block"
+  },
+  "Let Mutable": {
+    "prefix": "letm",
+    "body": "let mut ${1:name} = ${2:value};",
+    "description": "Mutable variable"
+  },
+  "Const": {
+    "prefix": "const",
+    "body": "const ${1:NAME} = ${2:value};",
+    "description": "Constant binding"
+  },
+  "Short Declaration": {
+    "prefix": ":=",
+    "body": "${1:name} := ${2:value};",
+    "description": "Short declaration"
+  }
+}

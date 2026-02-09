@@ -1,0 +1,81 @@
+{
+  "name": "ARNm Forge Light",
+  "type": "light",
+  "colors": {
+    "editor.background": "#fbfbfc",
+    "editor.foreground": "#1b1f24",
+    "editorLineNumber.foreground": "#98a2b3",
+    "editorLineNumber.activeForeground": "#1b1f24",
+    "editorCursor.foreground": "#d32f2f",
+    "editor.selectionBackground": "#ffd7d7",
+    "editor.selectionHighlightBackground": "#ffe7e7",
+    "editorIndentGuide.background": "#e5e7eb",
+    "editorIndentGuide.activeBackground": "#cbd5e1",
+    "editorWhitespace.foreground": "#e5e7eb",
+    "editorRuler.foreground": "#e5e7eb",
+    "sideBar.background": "#f5f6f8",
+    "sideBar.foreground": "#2b3138",
+    "activityBar.background": "#f0f2f5",
+    "activityBar.foreground": "#1b1f24",
+    "statusBar.background": "#f0f2f5",
+    "statusBar.foreground": "#2b3138",
+    "titleBar.activeBackground": "#f0f2f5",
+    "titleBar.activeForeground": "#1b1f24",
+    "panel.background": "#fbfbfc",
+    "terminal.background": "#fbfbfc",
+    "terminal.foreground": "#1b1f24"
+  },
+  "tokenColors": [
+    {
+      "name": "Comments",
+      "scope": ["comment"],
+      "settings": {
+        "foreground": "#7c8897",
+        "fontStyle": "italic"
+      }
+    },
+    {
+      "name": "Strings",
+      "scope": ["string"],
+      "settings": {
+        "foreground": "#2f7d6b"
+      }
+    },
+    {
+      "name": "Numbers",
+      "scope": ["constant.numeric"],
+      "settings": {
+        "foreground": "#b45309"
+      }
+    },
+    {
+      "name": "Keywords",
+      "scope": ["keyword.control", "keyword.operator"],
+      "settings": {
+        "foreground": "#c62828",
+        "fontStyle": "bold"
+      }
+    },
+    {
+      "name": "Functions",
+      "scope": ["entity.name.function"],
+      "settings": {
+        "foreground": "#9a6700"
+      }
+    },
+    {
+      "name": "Types",
+      "scope": ["storage.type"],
+      "settings": {
+        "foreground": "#0f766e"
+      }
+    },
+    {
+      "name": "Constants",
+      "scope": ["constant.language"],
+      "settings": {
+        "foreground": "#d97706"
+      }
+    }
+  ]
+}
