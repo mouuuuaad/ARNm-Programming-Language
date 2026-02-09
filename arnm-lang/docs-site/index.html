@@ -11,6 +11,12 @@
 
 <body>
     <div id="motion-root" aria-hidden="true"></div>
+    <div id="page-transition" class="page-transition" aria-hidden="true">
+        <div class="film-shutter film-top"></div>
+        <div class="film-shutter film-bottom"></div>
+        <div class="film-flash"></div>
+        <div class="film-grain"></div>
+    </div>
     <div class="container">
         <!-- Sidebar -->
         <nav class="sidebar" id="sidebar" data-lenis-prevent>
@@ -116,6 +122,7 @@
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
+    <script src="https://unpkg.com/gsap@3.12.5/dist/gsap.min.js"></script>
     <!-- Application Logic -->
     <script src="app.js"></script>
 </body>

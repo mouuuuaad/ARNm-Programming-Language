@@ -831,6 +831,18 @@ body.dark-mode .motion-orb {
         margin-left: 0;
         padding: 20px;
     }
+
+    #doc-content {
+        padding: 22px 20px;
+    }
+
+    .doc-pagination {
+        flex-direction: column;
+    }
+
+    .doc-pagination a {
+        width: 100%;
+    }
 }
 
 /* Print Styles */
@@ -1010,7 +1022,7 @@ body.dark-mode .motion-orb {
 
 /* Focus Mode */
 .sidebar-hidden .sidebar {
-    transform: translateX(-300px);
+    transform: translateX(-100%);
 }
 
 .sidebar-hidden .main-content {
