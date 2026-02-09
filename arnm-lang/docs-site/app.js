@@ -8,6 +8,9 @@
     const docContent = document.getElementById('doc-content');
     const searchInput = document.getElementById('search');
     const currentSectionSpan = document.getElementById('current-section');
+    let lenisInstance = null;
+    let revealObserver = null;
+    let motionRoot = null;
 
     // Simple Markdown Parser
     function parseMarkdown(md) {
@@ -97,6 +100,123 @@
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    function prefersReducedMotion() {
+        return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    }
+
+    function setupLenis() {
+        if (lenisInstance || !window.Lenis || prefersReducedMotion()) return;
+        lenisInstance = new window.Lenis({
+            duration: 1.05,
+            smoothWheel: true,
+            smoothTouch: false,
+            easing: function (t) {
+                return 1 - Math.pow(1 - t, 3);
+            }
+        });
+
+        function raf(time) {
+            lenisInstance.raf(time);
+            requestAnimationFrame(raf);
+        }
+        requestAnimationFrame(raf);
+    }
+
+    function smoothScrollTo(target, options) {
+        if (lenisInstance) {
+            lenisInstance.scrollTo(target, Object.assign({ offset: -80, duration: 1.1 }, options || {}));
+            return;
+        }
+        if (target && target.scrollIntoView) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+
+    function scrollToTop() {
+        if (lenisInstance) {
+            lenisInstance.scrollTo(0, { immediate: true });
+        } else {
+            window.scrollTo(0, 0);
+        }
+    }
+
+    function setupReveals() {
+        if (!docContent) return;
+        if (revealObserver) revealObserver.disconnect();
+
+        const targets = docContent.querySelectorAll(
+            'h1, h2, h3, p, pre, table, blockquote, ul, ol, .playground-container, .flow-diagram'
+        );
+
+        targets.forEach(function (el) {
+            el.classList.add('reveal');
+        });
+
+        if (prefersReducedMotion()) {
+            targets.forEach(function (el) {
+                el.classList.add('is-visible');
+            });
+            return;
+        }
+
+        revealObserver = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('is-visible');
+                    revealObserver.unobserve(entry.target);
+                }
+            });
+        }, { threshold: 0.15, rootMargin: '0px 0px -10% 0px' });
+
+        targets.forEach(function (el) {
+            revealObserver.observe(el);
+        });
+    }
+
+    function setupMotionBackdrop() {
+        if (motionRoot || prefersReducedMotion()) return;
+        const rootEl = document.getElementById('motion-root');
+        if (!rootEl || !window.React || !window.ReactDOM || !window.Motion) return;
+
+        const React = window.React;
+        const ReactDOM = window.ReactDOM;
+        const Motion = window.Motion;
+        const MotionDiv = Motion.motion.div;
+
+        const MotionLayer = function () {
+            return React.createElement(
+                'div',
+                { className: 'motion-layer' },
+                React.createElement(MotionDiv, {
+                    className: 'motion-orb orb-1',
+                    initial: { opacity: 0, scale: 0.9, x: -40, y: -30 },
+                    animate: { opacity: [0.4, 0.7, 0.4], scale: [0.9, 1.05, 0.95], x: [-40, 20, -30], y: [-30, 20, -40] },
+                    transition: { duration: 18, repeat: Infinity, ease: 'easeInOut' }
+                }),
+                React.createElement(MotionDiv, {
+                    className: 'motion-orb orb-2',
+                    initial: { opacity: 0, scale: 0.9, x: 30, y: 0 },
+                    animate: { opacity: [0.35, 0.6, 0.35], scale: [0.95, 1.1, 0.95], x: [30, -20, 15], y: [0, 30, -10] },
+                    transition: { duration: 22, repeat: Infinity, ease: 'easeInOut' }
+                }),
+                React.createElement(MotionDiv, {
+                    className: 'motion-orb orb-3',
+                    initial: { opacity: 0, scale: 0.9, y: 20 },
+                    animate: { opacity: [0.25, 0.45, 0.25], scale: [1, 1.05, 1], y: [20, -10, 20] },
+                    transition: { duration: 26, repeat: Infinity, ease: 'easeInOut' }
+                })
+            );
+        };
+
+        if (ReactDOM.createRoot) {
+            motionRoot = ReactDOM.createRoot(rootEl);
+            motionRoot.render(React.createElement(MotionLayer));
+        } else {
+            ReactDOM.render(React.createElement(MotionLayer), rootEl);
+            motionRoot = { render: function () { } };
+        }
     }
 
     // Build Table of Contents
@@ -747,6 +867,9 @@
         // Render content
         docContent.innerHTML = parseMarkdown(item.content);
 
+        // Reveal animations
+        setupReveals();
+
         // Build On This Page navigation
         buildPageTOC();
 
@@ -778,7 +901,7 @@
 
         // Scroll to top
         docContent.scrollTop = 0;
-        window.scrollTo(0, 0);
+        scrollToTop();
 
         // Update URL hash
         history.pushState(null, '', '#' + id);
@@ -866,7 +989,7 @@
                 const targetId = this.getAttribute('href').substring(1);
                 const target = document.getElementById(targetId);
                 if (target) {
-                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    smoothScrollTo(target, { offset: -80, duration: 1.1 });
                     // Update active state
                     pageToc.querySelectorAll('a').forEach(function (a) {
                         a.classList.remove('active');
@@ -1005,6 +1128,8 @@
 
     // Initialize
     function init() {
+        setupLenis();
+        setupMotionBackdrop();
         buildTOC();
 
         // Handle initial hash
