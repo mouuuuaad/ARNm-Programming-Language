@@ -22,14 +22,12 @@ Write and test ARNm code directly in your browser.
         <div class="editor-shell">
             <div class="editor-gutter" id="editor-gutter" aria-hidden="true"></div>
             <div class="editor-body">
-                <textarea id="code-editor" spellcheck="false" aria-label="ARNm code editor">
-fn main() {
+                <textarea id="code-editor" spellcheck="false" aria-label="ARNm code editor">fn main() {
     const greeting = "Hello, ARNm!";
     total := 10 + 20;
     print(greeting);
     print(total);
-}
-                </textarea>
+}</textarea>
                 <div class="editor-autocomplete" id="editor-autocomplete" role="listbox" aria-hidden="true"></div>
             </div>
         </div>
@@ -45,5 +43,7 @@ fn main() {
         </div>
     </div>
 </div>
+
+<div class="playground-hint">Tip: Press Ctrl+Space for autocomplete.</div>
 `
 });

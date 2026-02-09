@@ -124,6 +124,15 @@ gcc -o hello runtime/build/crt0.o hello.o -Lruntime/build -larnm -lpthread
 
 *(Note: We are working on a unified `build` command to automate the linking process.)*
 
+## 🧩 Editor Support
+
+VS Code tooling is available in `arnm-lang/editor/vscode`:
+- Syntax highlighting for `.arnm`
+- Snippets and lightweight completions
+- ARNm Forge Dark/Light themes
+
+Install locally in VS Code via **Developer: Install Extension from Location...** and select `arnm-lang/editor/vscode`.
+
 ## � Developer Guide
 
 This section details the internal workflows for developing and using ARNm.

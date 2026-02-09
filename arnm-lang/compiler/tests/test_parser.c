@@ -257,6 +257,7 @@ int main(void) {
     RUN_TEST(function_with_params);
     RUN_TEST(actor_declaration);
     RUN_TEST(let_statement);
+    RUN_TEST(const_and_short_decl);
     RUN_TEST(if_statement);
     RUN_TEST(spawn_statement);
     RUN_TEST(message_send);

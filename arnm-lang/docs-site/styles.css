@@ -808,6 +808,15 @@ pre {
     max-width: 1200px;
 }
 
+.playground-hint {
+    width: 80%;
+    max-width: 1200px;
+    margin: -10px auto 0;
+    font-size: 12px;
+    color: var(--muted-color);
+    text-align: right;
+}
+
 @media (min-width: 768px) {
     .playground-container {
         flex-direction: row;
@@ -860,6 +869,7 @@ pre {
     font-size: 12px;
     line-height: 1.6;
     text-align: right;
+    white-space: pre;
     border-right: 1px solid var(--editor-border);
     user-select: none;
     overflow: hidden;
@@ -869,6 +879,7 @@ pre {
     position: relative;
     flex: 1;
     background: var(--editor-bg);
+    display: flex;
 }
 
 #code-editor {
@@ -909,6 +920,7 @@ pre {
     padding: 6px;
     z-index: 20;
     display: none;
+    font-family: var(--font-code);
 }
 
 .editor-autocomplete.visible {
@@ -1004,6 +1016,11 @@ pre {
     margin-top: 5px;
 }
 
+.log-warning {
+    color: #f57c00;
+    margin-top: 5px;
+}
+
 .log-output {
     color: #333;
     margin-left: 10px;
@@ -1020,6 +1037,10 @@ pre {
 
 .dark-mode .log-info {
     color: #2196f3;
+}
+
+.dark-mode .log-warning {
+    color: #ffb74d;
 }
 
 .dark-mode .log-output {

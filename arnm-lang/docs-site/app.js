@@ -396,8 +396,9 @@
                             return;
                         } else {
                             output.innerHTML += `<div class="log-error">${result.output.replace(/\n/g, '<br>')}</div>`;
+                            output.innerHTML += '<div class="log-warning">WASM compile failed, falling back to local interpreter...</div>';
                             output.scrollTop = output.scrollHeight;
-                            return;
+                            useWasm = false;
                         }
                     } catch (e) {
                         console.warn('WASM execution failed, falling back to mock:', e);
@@ -455,7 +456,6 @@
                 { label: 'continue', kind: 'keyword', insertText: 'continue;' },
                 { label: 'return', kind: 'keyword', insertText: 'return ' },
                 { label: 'spawn', kind: 'keyword', insertText: 'spawn ' },
-                { label: 'send', kind: 'keyword', insertText: 'send(' },
                 { label: 'print', kind: 'builtin', insertText: 'print(' },
                 { label: 'self', kind: 'keyword', insertText: 'self' },
                 { label: 'true', kind: 'literal', insertText: 'true' },
@@ -656,7 +656,7 @@
                     }
                 }
 
-                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === ' ') {
+                if ((e.ctrlKey || e.metaKey) && (e.code === 'Space' || e.key === ' ')) {
                     e.preventDefault();
                     renderAutocomplete(true);
                     return;
