@@ -11,6 +11,53 @@
     let lenisInstance = null;
     let revealObserver = null;
     let motionRoot = null;
+    let transitionElements = null;
+    let isTransitioning = false;
+    let currentDocId = null;
+    let currentScrollHandler = null;
+    let currentScrollSource = null;
+
+    function highlightArnm(code) {
+        let working = code || '';
+        const tokens = [];
+        let tokenIndex = 0;
+
+        const wrap = function (regex, cls) {
+            working = working.replace(regex, function (match) {
+                const token = '__ARNM_TOKEN_' + tokenIndex + '__';
+                tokens.push({ token: token, html: '<span class="' + cls + '">' + escapeHtml(match) + '</span>' });
+                tokenIndex += 1;
+                return token;
+            });
+        };
+
+        // Comments and strings first
+        wrap(/\/\/.*$/gm, 'tok-comment');
+        wrap(/\/\*[\s\S]*?\*\//g, 'tok-comment');
+        wrap(/"(?:\\.|[^"\\])*"/g, 'tok-string');
+        wrap(/'(?:\\.|[^'\\])*'/g, 'tok-string');
+
+        // Numbers and literals
+        wrap(/\b\d+(?:\.\d+)?\b/g, 'tok-number');
+        wrap(/\b(true|false|nil)\b/g, 'tok-literal');
+
+        // Keywords and types
+        wrap(/\b(let|const|mut|fn|actor|struct|enum|impl|return|if|else|while|for|loop|break|continue|match|spawn|receive|self|use|pub|as|in)\b/g, 'tok-keyword');
+        wrap(/\b(i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|bool|String|char|any|Actor|Pid)\b/g, 'tok-type');
+
+        // Builtins and functions
+        wrap(/\b(print|send|await|sleep|panic|assert)\b/g, 'tok-builtin');
+        wrap(/([A-Za-z_][A-Za-z0-9_]*)(?=\s*\()/g, 'tok-function');
+
+        // Operators
+        wrap(/=>|->|==|!=|<=|>=|\+\+|--|\+|-|\*|\/|%|&&|\|\||!|=|<|>|\^|\||&/g, 'tok-operator');
+
+        let escaped = escapeHtml(working);
+        tokens.forEach(function (token) {
+            escaped = escaped.replace(token.token, token.html);
+        });
+        return escaped;
+    }
 
     // Simple Markdown Parser
     function parseMarkdown(md) {
@@ -18,8 +65,15 @@
 
         // Code blocks (must be first)
         html = html.replace(/```(\w*)\n([\s\S]*?)```/g, function (match, lang, code) {
-            const escaped = escapeHtml(code.trim());
-            return '<pre><code class="language-' + lang + '">' + escaped + '</code></pre>';
+            const language = (lang || '').trim().toLowerCase();
+            const label = language || 'code';
+            const trimmed = code.replace(/\s+$/, '');
+            if (!language || language === 'arnm') {
+                const highlighted = highlightArnm(trimmed);
+                return '<pre data-lang="' + label + '"><code class="language-arnm">' + highlighted + '</code></pre>';
+            }
+            const escaped = escapeHtml(trimmed);
+            return '<pre data-lang="' + language + '"><code class="language-' + language + '">' + escaped + '</code></pre>';
         });
 
         // Headers
@@ -117,16 +171,23 @@
             }
         });
 
-        function raf(time) {
-            lenisInstance.raf(time);
+        if (window.gsap && window.gsap.ticker) {
+            window.gsap.ticker.add(function (time) {
+                lenisInstance.raf(time * 1000);
+            });
+            window.gsap.ticker.lagSmoothing(0);
+        } else {
+            function raf(time) {
+                lenisInstance.raf(time);
+                requestAnimationFrame(raf);
+            }
             requestAnimationFrame(raf);
         }
-        requestAnimationFrame(raf);
     }
 
     function smoothScrollTo(target, options) {
         if (lenisInstance) {
-            lenisInstance.scrollTo(target, Object.assign({ offset: -80, duration: 1.1 }, options || {}));
+            lenisInstance.scrollTo(target, Object.assign({ offset: -96, duration: 1.1 }, options || {}));
             return;
         }
         if (target && target.scrollIntoView) {
@@ -219,6 +280,90 @@
         }
     }
 
+    function setupPageTransition() {
+        const overlay = document.getElementById('page-transition');
+        if (!overlay || transitionElements) return;
+
+        transitionElements = {
+            overlay: overlay,
+            top: overlay.querySelector('.film-top'),
+            bottom: overlay.querySelector('.film-bottom'),
+            flash: overlay.querySelector('.film-flash'),
+            grain: overlay.querySelector('.film-grain')
+        };
+
+        if (window.gsap) {
+            window.gsap.set(overlay, { autoAlpha: 0 });
+            window.gsap.set([transitionElements.top, transitionElements.bottom], { scaleY: 0 });
+            window.gsap.set(transitionElements.flash, { autoAlpha: 0 });
+            window.gsap.set(transitionElements.grain, { autoAlpha: 0 });
+        } else {
+            overlay.style.opacity = '0';
+            overlay.style.visibility = 'hidden';
+        }
+    }
+
+    function getDocIndex(id) {
+        if (!window.documentationContent) return -1;
+        return window.documentationContent.findIndex(function (item) { return item.id === id; });
+    }
+
+    function transitionTo(id, options) {
+        const opts = Object.assign({ pushState: true }, options || {});
+        if (!id || id === currentDocId || isTransitioning) return;
+
+        if (!window.documentationContent || getDocIndex(id) === -1) return;
+
+        if (prefersReducedMotion() || !window.gsap || !transitionElements || !transitionElements.top || !transitionElements.bottom) {
+            navigateTo(id, { pushState: opts.pushState });
+            return;
+        }
+
+        const mainContent = document.getElementById('main-content');
+        const overlay = transitionElements.overlay;
+        const top = transitionElements.top;
+        const bottom = transitionElements.bottom;
+        const flash = transitionElements.flash;
+        const grain = transitionElements.grain;
+
+        if (!mainContent) {
+            navigateTo(id, { pushState: opts.pushState });
+            return;
+        }
+        const direction = getDocIndex(id) >= getDocIndex(currentDocId) ? 1 : -1;
+        const xShift = direction > 0 ? -80 : 80;
+        const yShift = direction > 0 ? 50 : -50;
+
+        isTransitioning = true;
+        document.body.classList.add('is-transitioning');
+
+        const tl = window.gsap.timeline({
+            defaults: { ease: 'power3.inOut' },
+            onComplete: function () {
+                isTransitioning = false;
+                document.body.classList.remove('is-transitioning');
+            }
+        });
+
+        tl.set(overlay, { autoAlpha: 1 })
+            .set([top, bottom], { scaleY: 0 })
+            .set(flash, { autoAlpha: 0 })
+            .set(grain, { autoAlpha: 0.0 })
+            .to([top, bottom], { scaleY: 1, duration: 0.45 }, 0)
+            .to(grain, { autoAlpha: 0.45, duration: 0.25 }, 0.1)
+            .to(mainContent, { x: xShift, y: yShift, scale: 0.96, filter: 'blur(6px)', duration: 0.45 }, 0)
+            .to(flash, { autoAlpha: 1, duration: 0.12 }, 0.3)
+            .to(flash, { autoAlpha: 0, duration: 0.2 }, 0.42)
+            .add(function () {
+                navigateTo(id, { pushState: opts.pushState });
+            }, 0.48)
+            .set(mainContent, { x: -xShift * 0.6, y: -yShift * 0.6, scale: 1.03 })
+            .to([top, bottom], { scaleY: 0, duration: 0.5 }, 0.5)
+            .to(mainContent, { x: 0, y: 0, scale: 1, filter: 'blur(0px)', duration: 0.5 }, 0.5)
+            .to(grain, { autoAlpha: 0.15, duration: 0.3 }, 0.55)
+            .to(overlay, { autoAlpha: 0, duration: 0.3 }, 0.8);
+    }
+
     // Build Table of Contents
     function buildTOC() {
         if (!window.documentationContent) return;
@@ -253,9 +398,11 @@
             link.addEventListener('click', function (e) {
                 e.preventDefault();
                 const id = this.getAttribute('href').substring(1);
-                navigateTo(id);
+                transitionTo(id);
             });
         });
+
+        playNavTocIntro();
     }
 
     // Setup Playground
@@ -859,7 +1006,8 @@
     }
 
     // Navigate to section
-    function navigateTo(id) {
+    function navigateTo(id, options) {
+        const opts = Object.assign({ pushState: true }, options || {});
         const item = window.documentationContent.find(function (i) { return i.id === id; });
         if (!item) return;
 
@@ -871,7 +1019,7 @@
         setupReveals();
 
         // Build On This Page navigation
-        buildPageTOC();
+        buildPageTOC(id);
 
         // Initialize Playground if loaded
         if (id === 'playground') {
@@ -903,8 +1051,12 @@
         docContent.scrollTop = 0;
         scrollToTop();
 
+        currentDocId = id;
+
         // Update URL hash
-        history.pushState(null, '', '#' + id);
+        if (opts.pushState) {
+            history.pushState(null, '', '#' + id);
+        }
     }
 
     // Update Pagination Links
@@ -922,7 +1074,7 @@
             prevLink.querySelector('.nav-title').textContent = prevItem.title;
             prevLink.onclick = function (e) {
                 e.preventDefault();
-                navigateTo(prevItem.id);
+                transitionTo(prevItem.id);
             };
         } else {
             prevLink.classList.add('disabled');
@@ -937,7 +1089,7 @@
             nextLink.querySelector('.nav-title').textContent = nextItem.title;
             nextLink.onclick = function (e) {
                 e.preventDefault();
-                navigateTo(nextItem.id);
+                transitionTo(nextItem.id);
             };
         } else {
             nextLink.classList.add('disabled');
@@ -947,12 +1099,12 @@
     }
 
     // Build On This Page navigation from headings
-    function buildPageTOC() {
+    function buildPageTOC(activeId) {
         const pageToc = document.getElementById('page-toc');
         if (!pageToc) return;
 
         // Hide TOC on Playground and Flows pages
-        const currentId = window.location.hash.substring(1);
+        const currentId = activeId || window.location.hash.substring(1);
         const tocContainer = document.querySelector('.on-this-page');
 
         if (currentId === 'playground' || currentId === 'flows') {
@@ -974,13 +1126,14 @@
             const headingId = 'heading-' + index;
             heading.id = headingId;
 
-            const itemClass = level === 'h3' ? 'h3-item' : '';
+            const itemClass = level === 'h3' ? 'h3-item toc-level-3' : 'toc-level-2';
             tocHTML += '<li class="' + itemClass + '">';
             tocHTML += '<a href="#' + headingId + '">' + text + '</a>';
             tocHTML += '</li>';
         });
 
         pageToc.innerHTML = tocHTML;
+        pageToc.scrollTop = 0;
 
         // Add click handlers for smooth scroll
         pageToc.querySelectorAll('a').forEach(function (link) {
@@ -989,7 +1142,7 @@
                 const targetId = this.getAttribute('href').substring(1);
                 const target = document.getElementById(targetId);
                 if (target) {
-                    smoothScrollTo(target, { offset: -80, duration: 1.1 });
+                    smoothScrollTo(target, { offset: -96, duration: 1.1 });
                     // Update active state
                     pageToc.querySelectorAll('a').forEach(function (a) {
                         a.classList.remove('active');
@@ -1005,11 +1158,12 @@
             firstLink.classList.add('active');
         }
 
+        // Animate in
+        playPageTocIntro();
+
         // Add scroll spy
         setupScrollSpy();
     }
-
-    let currentScrollHandler = null;
 
     // Scroll spy to highlight current section
     function setupScrollSpy() {
@@ -1022,12 +1176,18 @@
 
         // Remove existing handler if any
         if (currentScrollHandler) {
-            window.removeEventListener('scroll', currentScrollHandler);
+            if (currentScrollSource === 'lenis' && lenisInstance && typeof lenisInstance.off === 'function') {
+                lenisInstance.off('scroll', currentScrollHandler);
+            } else {
+                window.removeEventListener('scroll', currentScrollHandler);
+            }
+            currentScrollHandler = null;
+            currentScrollSource = null;
         }
 
         // Helper to update progress bar and scroll TOC
         function updateTOCState(activeLink) {
-            if (!progressBar || !activeLink || !pageToc) return;
+            if (!progressBar || !activeLink || !pageToc || !tocWrapper) return;
 
             // 1. Move the scroll progress bar
             // We use standard offsetTop calculation relative to the TOC container
@@ -1042,52 +1202,59 @@
             progressBar.style.top = relativeTop + 'px';
             progressBar.style.height = linkRect.height + 'px';
 
-            // 2. Smoothly scroll the TOC list if the item is out of view or close to edge
+            // 2. Snap the active item toward the top of the list for clearer context
             const tocHeight = pageToc.clientHeight;
             const linkTop = activeLink.offsetTop;
-            const linkHeight = activeLink.offsetHeight;
-
-            // Calculate clear visibility zone
-            // We want to center it
-            const targetScroll = linkTop - (tocHeight / 2) + (linkHeight / 2);
+            const targetScroll = Math.max(0, linkTop - 12);
+            const maxScroll = Math.max(0, pageToc.scrollHeight - tocHeight);
+            const clamped = Math.min(maxScroll, targetScroll);
 
             pageToc.scrollTo({
-                top: targetScroll,
+                top: clamped,
                 behavior: 'smooth'
             });
         }
 
         if (headings.length === 0) return;
 
-        currentScrollHandler = function () {
+        currentScrollHandler = function (event) {
+            const getScrollY = function () {
+                if (lenisInstance && typeof lenisInstance.scroll === 'number') return lenisInstance.scroll;
+                const doc = document.documentElement;
+                return window.scrollY || doc.scrollTop || 0;
+            };
+
+            const scrollY = event && typeof event.scroll === 'number'
+                ? event.scroll
+                : getScrollY();
+
+            // Use a point slightly below the top to pick the current heading
+            const pivot = scrollY + (window.innerHeight * 0.28);
             let current = '';
-            const scrollPos = window.scrollY + 100;
 
             headings.forEach(function (heading) {
-                const sectionTop = heading.offsetTop;
-                if (scrollPos >= sectionTop) {
+                const sectionTop = heading.getBoundingClientRect().top + scrollY;
+                if (sectionTop <= pivot) {
                     current = heading.id;
                 }
             });
 
-            // If we're at the bottom of the page, check if we should highlight the last item
-            if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 50) {
-                if (headings.length > 0) {
-                    current = headings[headings.length - 1].id;
-                }
+            // If we're near the bottom, lock to the last heading
+            const docHeight = document.documentElement.scrollHeight || document.body.offsetHeight;
+            if ((window.innerHeight + scrollY) >= docHeight - 40 && headings.length > 0) {
+                current = headings[headings.length - 1].id;
             }
 
             let foundActive = false;
             pageToc.querySelectorAll('a').forEach(function (link) {
-                link.classList.remove('active');
-                if (link.getAttribute('href') === '#' + current) {
-                    link.classList.add('active');
+                const isActive = link.getAttribute('href') === '#' + current;
+                link.classList.toggle('active', isActive);
+                if (isActive) {
                     updateTOCState(link);
                     foundActive = true;
                 }
             });
 
-            // If no current (top of page), highlight first
             if (!foundActive) {
                 const firstLink = pageToc.querySelector('a');
                 if (firstLink) {
@@ -1097,12 +1264,92 @@
             }
         };
 
-        window.addEventListener('scroll', currentScrollHandler);
+        if (lenisInstance && typeof lenisInstance.on === 'function') {
+            currentScrollSource = 'lenis';
+            lenisInstance.on('scroll', currentScrollHandler);
+        } else {
+            currentScrollSource = 'window';
+            window.addEventListener('scroll', currentScrollHandler);
+        }
 
         // Initial update
         setTimeout(function () {
-            currentScrollHandler();
+            currentScrollHandler({ scroll: lenisInstance ? lenisInstance.scroll : window.scrollY });
         }, 100);
+    }
+
+    function playPageTocIntro() {
+        const toc = document.getElementById('page-toc');
+        if (!toc || !window.gsap) return;
+        const items = toc.querySelectorAll('li');
+        if (!items.length) return;
+
+        toc.classList.remove('toc-animated');
+        toc.classList.add('toc-animate');
+
+        const run = function () {
+            window.gsap.killTweensOf(items);
+            window.gsap.set(items, { autoAlpha: 0, y: 18 });
+            window.gsap.to(items, {
+                autoAlpha: 1,
+                y: 0,
+                duration: 0.55,
+                ease: 'power3.out',
+                stagger: 0.06,
+                onComplete: function () {
+                    toc.classList.add('toc-animated');
+                    toc.classList.remove('toc-animate');
+                }
+            });
+        };
+
+        const observer = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+                if (entry.isIntersecting) {
+                    run();
+                    observer.disconnect();
+                }
+            });
+        }, { threshold: 0.2 });
+
+        observer.observe(toc);
+    }
+
+    function playNavTocIntro() {
+        const toc = document.getElementById('toc');
+        if (!toc || !window.gsap) return;
+        const items = toc.querySelectorAll('.toc-item');
+        if (!items.length) return;
+
+        toc.classList.remove('toc-animated');
+        toc.classList.add('toc-animate');
+
+        const run = function () {
+            window.gsap.killTweensOf(items);
+            window.gsap.set(items, { autoAlpha: 0, y: 22 });
+            window.gsap.to(items, {
+                autoAlpha: 1,
+                y: 0,
+                duration: 0.6,
+                ease: 'power3.out',
+                stagger: 0.05,
+                onComplete: function () {
+                    toc.classList.add('toc-animated');
+                    toc.classList.remove('toc-animate');
+                }
+            });
+        };
+
+        const observer = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+                if (entry.isIntersecting) {
+                    run();
+                    observer.disconnect();
+                }
+            });
+        }, { threshold: 0.15 });
+
+        observer.observe(toc);
     }
 
 
@@ -1130,14 +1377,15 @@
     function init() {
         setupLenis();
         setupMotionBackdrop();
+        setupPageTransition();
         buildTOC();
 
         // Handle initial hash
         const hash = window.location.hash.substring(1);
         if (hash && window.documentationContent.find(function (i) { return i.id === hash; })) {
-            navigateTo(hash);
+            navigateTo(hash, { pushState: false });
         } else if (window.documentationContent && window.documentationContent.length > 0) {
-            navigateTo(window.documentationContent[0].id);
+            navigateTo(window.documentationContent[0].id, { pushState: false });
         }
 
         // Search input handler
@@ -1149,7 +1397,9 @@
         window.addEventListener('popstate', function () {
             const hash = window.location.hash.substring(1);
             if (hash) {
-                navigateTo(hash);
+                transitionTo(hash, { pushState: false });
+            } else if (window.documentationContent && window.documentationContent.length > 0) {
+                transitionTo(window.documentationContent[0].id, { pushState: false });
             }
         });
     }
