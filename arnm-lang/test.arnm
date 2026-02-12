@@ -4,3 +4,4 @@ fn main() {
     let y = 20;
     print(x + y);
 }
+
