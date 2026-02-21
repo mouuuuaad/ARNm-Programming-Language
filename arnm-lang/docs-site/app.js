@@ -81,6 +81,9 @@
         html = html.replace(/^## (.+)$/gm, '<h2 id="$1">$1</h2>');
         html = html.replace(/^# (.+)$/gm, '<h1 id="$1">$1</h1>');
 
+        // Remove horizontal rules composed of "---"
+        html = html.replace(/^\s*---\s*$/gm, '');
+
         // Tables
         html = parseTable(html);
 
